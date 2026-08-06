@@ -23,7 +23,7 @@ local Theme = {
 
 local Config = {
     Aimbot=false, HoldToAim=true, AimbotSmoothness=1, WallCheck=true, FOV=100,
-    ShowFOV=true, SilentAim=false,
+    ShowFOV=false, SilentAim=false,
     ESP=false, BoxESP=true, NameESP=true,
     HealthBar=true, Chams=true, Tracers=false, TeamCheck=true,
     InfiniteAmmo=false, NoRecoil=false, RapidFire=false,
@@ -484,7 +484,7 @@ A1:AddToggle("Hold Right Click", "",true, function(v) Config.HoldToAim=v end)
 A1:AddSlider("Smoothness",        1,20,1, function(v) Config.AimbotSmoothness=v end)
 A1:AddToggle("Wall Check",       "",true, function(v) Config.WallCheck=v end)
 A1:AddSlider("FOV Radius",       10,500,100, function(v) Config.FOV=v end)
-A1:AddToggle("Show FOV Circle",  "",true, function(v) Config.ShowFOV=v end)
+A1:AddToggle("Show FOV Circle",  "",false, function(v) Config.ShowFOV=v end)
 
 local A2 = CombatTab:AddSection("Silent Aim")
 A2:AddToggle("Silent Aim",  "",false, function(v) Config.SilentAim=v end)
