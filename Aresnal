@@ -277,19 +277,22 @@ function Library:CreateWindow(title)
 
     -- Glow shadow frame (sits behind MainFrame)
     local GlowFrame = Instance.new("Frame"); GlowFrame.Name="GlowFrame"
-    GlowFrame.Size=UDim2.new(0,456,0,306); GlowFrame.Position=UDim2.new(0.5,-228,0.5,-153)
+    GlowFrame.Size=UDim2.new(0,360,0,240); GlowFrame.Position=UDim2.new(0.5,-180,0.5,-120)
     GlowFrame.BackgroundColor3=Theme.Accent; GlowFrame.BorderSizePixel=0; GlowFrame.ZIndex=0
+    GlowFrame.BackgroundTransparency=1
     GlowFrame.Parent=SG
     Instance.new("UICorner",GlowFrame).CornerRadius=UDim.new(0,10)
 
-    local MF = Instance.new("Frame"); MF.Name="MainFrame"; MF.Size=UDim2.new(0,450,0,300)
-    MF.Position=UDim2.new(0.5,-225,0.5,-150); MF.BackgroundColor3=Theme.MainBg
+    local MF = Instance.new("Frame"); MF.Name="MainFrame"; MF.Size=UDim2.new(0,360,0,240)
+    MF.Position=UDim2.new(0.5,-180,0.5,-120); MF.BackgroundColor3=Theme.MainBg
+    MF.BackgroundTransparency=1
     MF.BorderSizePixel=0; MF.ZIndex=1; MF.Parent=SG
     Instance.new("UICorner",MF).CornerRadius=UDim.new(0,8)
     -- Animated border — same rotating gradient as MM2 Combat
     local MS = Instance.new("UIStroke",MF)
-    MS.Color     = Color3.fromRGB(255,255,255)
-    MS.Thickness = 2
+    MS.Color        = Color3.fromRGB(255,255,255)
+    MS.Thickness    = 2
+    MS.Transparency = 1
     MS.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     local StrokeGradient = Instance.new("UIGradient",MS)
     StrokeGradient.Color = ColorSequence.new({
@@ -369,7 +372,10 @@ function Library:CreateWindow(title)
         CL:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() TC.CanvasSize=UDim2.new(0,0,0,CL.AbsoluteContentSize.Y+10) end)
         TBtn.MouseButton1Click:Connect(function()
             for _,t in pairs(Win.Tabs) do t.Btn.BackgroundColor3=Theme.TabBg; t.Content.Visible=false end
-            TBtn.BackgroundColor3=Theme.TabActive; TC.Visible=true
+            TBtn.BackgroundColor3=Theme.TabActive
+            TC.Position = UDim2.new(0, 10, 0, 18)
+            TC.Visible=true
+            TweenService:Create(TC, TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Position = UDim2.new(0, 10, 0, 10)}):Play()
         end)
         if not Win.CurrentTab then Win.CurrentTab=name; TBtn.BackgroundColor3=Theme.TabActive; TC.Visible=true end
         table.insert(Win.Tabs,{Btn=TBtn,Content=TC})
@@ -426,6 +432,37 @@ function Library:CreateWindow(title)
         end
         return TabObj
     end
+
+    -- Smooth Springy Load-In Entrance Animation
+    task.spawn(function()
+        task.wait(0.05)
+        pcall(function()
+            local snd = Instance.new("Sound")
+            snd.SoundId = "rbxassetid://6895079853"
+            snd.Volume = 0.5
+            snd.PlaybackSpeed = 1.15
+            snd.Parent = game:GetService("SoundService")
+            snd:Play()
+            snd.Ended:Connect(function() snd:Destroy() end)
+        end)
+
+        TweenService:Create(MF, TweenInfo.new(0.65, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+            Size = UDim2.new(0, 450, 0, 300),
+            Position = UDim2.new(0.5, -225, 0.5, -150),
+            BackgroundTransparency = 0
+        }):Play()
+
+        TweenService:Create(GlowFrame, TweenInfo.new(0.65, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+            Size = UDim2.new(0, 456, 0, 306),
+            Position = UDim2.new(0.5, -228, 0.5, -153),
+            BackgroundTransparency = 0.5
+        }):Play()
+
+        TweenService:Create(MS, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+            Transparency = 0
+        }):Play()
+    end)
+
     return Win
 end
 
