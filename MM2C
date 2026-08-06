@@ -460,6 +460,20 @@ local function getClosestPlayer(range)
     return closest
 end
 
+local function isValidCoin(part)
+    if not part or not part:IsA("BasePart") then return false end
+    if part.Transparency >= 0.9 then return false end
+    if part:FindFirstAncestor("Lobby") or part:FindFirstAncestor("Shop") or part:FindFirstAncestor("PlayerGui") or part:FindFirstAncestor("CoreGui") then
+        return false
+    end
+    local name = part.Name:lower()
+    local pName = part.Parent and part.Parent.Name:lower() or ""
+    if name == "maincoin" or name == "coin" or name:find("coin") or name:find("token") or name:find("beachball") or pName == "coincontainer" or pName == "coinserver" or pName:find("coin") then
+        return true
+    end
+    return false
+end
+
 -- ====================
 -- Combat Tab
 -- ====================
@@ -547,11 +561,9 @@ end)
 VisualsSection:AddToggle("Coin ESP", "Highlight all coins", false, function(Value)
     Config.CoinESP = Value
     if not Value then
-        if workspace:FindFirstChild("Normal") and workspace.Normal:FindFirstChild("CoinContainer") then
-            for _, coin in pairs(workspace.Normal.CoinContainer:GetChildren()) do
-                if coin:FindFirstChild("ESP_Luno_Coin") then
-                    coin.ESP_Luno_Coin:Destroy()
-                end
+        for _, desc in pairs(workspace:GetDescendants()) do
+            if desc:FindFirstChild("ESP_Luno_Coin") then
+                pcall(function() desc.ESP_Luno_Coin:Destroy() end)
             end
         end
     end
@@ -701,23 +713,32 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- Coin ESP
+    -- Coin ESP (Universal Gold Highlight Scanner)
     if Config.CoinESP then
-        if workspace:FindFirstChild("Normal") and workspace.Normal:FindFirstChild("CoinContainer") then
-            for _, coin in pairs(workspace.Normal.CoinContainer:GetChildren()) do
-                if coin.Name == "Coin_Server" and not coin:FindFirstChild("ESP_Luno_Coin") then
-                    local esp = Instance.new("BoxHandleAdornment")
-                    esp.Name = "ESP_Luno_Coin"
-                    esp.Size = Vector3.new(2, 2, 2) -- Default size for coin
-                    if coin:IsA("BasePart") then
-                        esp.Size = coin.Size + Vector3.new(0.2, 0.2, 0.2)
+        local coinContainers = {
+            workspace:FindFirstChild("Normal"),
+            workspace:FindFirstChild("Map"),
+            workspace:FindFirstChild("CoinContainer"),
+        }
+        -- Fallback to workspace if specific containers aren't present
+        local validContainers = {}
+        for _, c in ipairs(coinContainers) do
+            if c then table.insert(validContainers, c) end
+        end
+        if #validContainers == 0 then table.insert(validContainers, workspace) end
+
+        for _, container in ipairs(validContainers) do
+            for _, desc in pairs(container:GetDescendants()) do
+                if isValidCoin(desc) then
+                    if not desc:FindFirstChild("ESP_Luno_Coin") then
+                        local esp = Instance.new("Highlight")
+                        esp.Name = "ESP_Luno_Coin"
+                        esp.FillColor = Color3.fromRGB(255, 215, 0) -- Vibrant Gold
+                        esp.OutlineColor = Color3.fromRGB(255, 255, 255)
+                        esp.FillTransparency = 0.25
+                        esp.OutlineTransparency = 0
+                        esp.Parent = desc
                     end
-                    esp.Color3 = Color3.fromRGB(255, 215, 0)
-                    esp.AlwaysOnTop = true
-                    esp.ZIndex = 5
-                    esp.Transparency = 0.4
-                    esp.Adornee = coin
-                    esp.Parent = coin
                 end
             end
         end
