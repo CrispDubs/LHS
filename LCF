@@ -1,1 +1,877 @@
+--------------------------------------------------------------------------------
+-- ==============================================================================
+-- LUNO MM2 — PURE COIN FARM 24/7 (STANDARD LUNO UI EDITION)
+-- Features:
+--   - 🎒 100% Focused 24/7 Pure Coin Farming Engine (Safe Glide & Instant Collect)
+--   - 💎 Modular Flat Luno UI Library with Animated Rotating Accent Border
+--   - 📊 Live Session Stats & Real-Time Round Intelligence Status Display
+--   - 🛡️ Anti-Cheat Safe Speed Glide (<21.5 studs/s) & Murderer Evasion
+--   - 💤 Integrated Anti-AFK Protection & RightShift Menu Keybind
+-- ==============================================================================
+--------------------------------------------------------------------------------
 
+local Players          = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local HttpService      = game:GetService("HttpService")
+local RunService       = game:GetService("RunService")
+local Lighting         = game:GetService("Lighting")
+local VirtualUser      = game:GetService("VirtualUser")
+local TweenService     = game:GetService("TweenService")
+local TeleportService  = game:GetService("TeleportService")
+
+local LocalPlayer      = Players.LocalPlayer
+local Camera           = workspace.CurrentCamera
+
+--------------------------------------------------------------------------------
+-- 1. Theme Tokens & Global State
+--------------------------------------------------------------------------------
+local Theme = {
+    MainBg    = Color3.fromRGB(15, 15, 20),
+    TopbarBg  = Color3.fromRGB(25, 25, 30),
+    TabBg     = Color3.fromRGB(20, 20, 25),
+    TabActive = Color3.fromRGB(35, 35, 45),
+    Accent    = Color3.fromRGB(138, 43, 226),
+    TextTitle = Color3.fromRGB(255, 255, 255),
+    TextSub   = Color3.fromRGB(170, 170, 180),
+}
+
+local Config = {
+    AutoFarmEnabled     = true,
+    CoinESP             = true,
+    RoleESP             = true,
+    AntiAFK             = true,
+    FarmSpeed           = 21.5,
+    MAX_BAG_CAP         = 40,
+    Fullbright          = false,
+    WalkSpeed           = 16,
+}
+
+local OriginalLighting = {
+    Ambient        = Lighting.Ambient,
+    OutdoorAmbient = Lighting.OutdoorAmbient,
+    Brightness     = Lighting.Brightness,
+}
+
+local scriptRunning = true
+local sessionCoinsCollected = 0
+local currentRoundCoins     = 0
+local lastRecordedBag       = 0
+local isBusy                = false
+local coinBlacklist         = {}
+local coinFailTracker       = {}
+
+--------------------------------------------------------------------------------
+-- 2. Anti-AFK Protection
+--------------------------------------------------------------------------------
+local idleConn = LocalPlayer.Idled:Connect(function()
+    if Config.AntiAFK and scriptRunning then
+        pcall(function()
+            VirtualUser:CaptureController()
+            VirtualUser:ClickButton2(Vector2.new(0, 0))
+        end)
+    end
+end)
+
+--------------------------------------------------------------------------------
+-- 3. MM2 Game Intelligence & Role Scanner
+--------------------------------------------------------------------------------
+local function isKnifeTool(tool)
+    if not tool or not tool:IsA("Tool") then return false end
+    local name = tool.Name:lower()
+    if name:find("knife") or name:find("slash") or name:find("blade") or name:find("sword") or name:find("dagger") or name:find("harvester") or name:find("bat") then
+        return true
+    end
+    if tool:FindFirstChild("KnifeServer") or tool:FindFirstChild("Stab") or tool:FindFirstChild("Slash") or tool:FindFirstChild("Throw") or tool:FindFirstChild("TouchInterest", true) then
+        return true
+    end
+    return false
+end
+
+local function isGunTool(tool)
+    if not tool or not tool:IsA("Tool") then return false end
+    local name = tool.Name:lower()
+    if name:find("gun") or name:find("revolver") or name:find("sheriff") or name:find("pistol") or name:find("blaster") then
+        return true
+    end
+    if tool:FindFirstChild("GunServer") or tool:FindFirstChild("Shoot") or tool:FindFirstChild("ShootGun") or tool:FindFirstChild("Bullet") then
+        return true
+    end
+    return false
+end
+
+local function getPlayerRole(player)
+    if not player or not player.Character then return "Innocent" end
+    local character = player.Character
+    local backpack = player:FindFirstChild("Backpack")
+
+    local function searchContainer(container, checkFn)
+        if not container then return false end
+        for _, child in ipairs(container:GetChildren()) do
+            if checkFn(child) then return true end
+        end
+        return false
+    end
+
+    if searchContainer(character, isKnifeTool) or searchContainer(backpack, isKnifeTool) then
+        return "Murderer"
+    elseif searchContainer(character, isGunTool) or searchContainer(backpack, isGunTool) then
+        return "Sheriff"
+    end
+    return "Innocent"
+end
+
+local function getPlayerByRole(roleName)
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and getPlayerRole(p) == roleName then
+            return p
+        end
+    end
+    return nil
+end
+
+local function isSpectating()
+    local pGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if pGui then
+        local mainGui = pGui:FindFirstChild("MainGUI") or pGui:FindFirstChild("ScreenGui")
+        if mainGui and mainGui:FindFirstChild("Game") and mainGui.Game:FindFirstChild("Spectate") then
+            return mainGui.Game.Spectate.Visible
+        end
+    end
+    return false
+end
+
+local function getActualCoinsFromGame()
+    local count = nil
+    pcall(function()
+        local pGui = LocalPlayer:FindFirstChild("PlayerGui")
+        if not pGui then return end
+        local mainGui = pGui:FindFirstChild("MainGUI") or pGui:FindFirstChild("ScreenGui") or pGui:FindFirstChildWhichIsA("ScreenGui")
+        if not mainGui then return end
+
+        for _, desc in ipairs(mainGui:GetDescendants()) do
+            if desc:IsA("TextLabel") and desc.Visible then
+                local txt = desc.Text
+                if txt and txt:find("/") then
+                    local current, maxC = txt:match("(%d+)%s*/%s*(%d+)")
+                    if current and maxC then
+                        local val = tonumber(current)
+                        local mVal = tonumber(maxC)
+                        if val and mVal and val >= 0 and val <= mVal and mVal >= 10 and mVal <= 100 then
+                            count = val
+                            break
+                        end
+                    end
+                end
+            end
+        end
+
+        if count == nil then
+            for _, desc in ipairs(mainGui:GetDescendants()) do
+                if desc:IsA("TextLabel") then
+                    local p = desc.Parent
+                    local pName = p and p.Name:lower() or ""
+                    if pName:find("coin") or pName:find("bag") or desc.Name:lower():find("coin") then
+                        local txt = desc.Text
+                        if txt then
+                            local val = tonumber(txt:match("(%d+)"))
+                            if val and val >= 0 and val <= Config.MAX_BAG_CAP then
+                                count = val
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    return count
+end
+
+--------------------------------------------------------------------------------
+-- 4. Universal Coin Finder & Evasion
+--------------------------------------------------------------------------------
+local function isValidCoin(part)
+    if not part or not part:IsA("BasePart") then return false end
+    if part.Transparency >= 0.95 then return false end
+    if coinBlacklist[part] and tick() < coinBlacklist[part] then return false end
+
+    if part:FindFirstAncestor("Lobby") or part:FindFirstAncestor("Shop") or part:FindFirstAncestor("PlayerGui") or part:FindFirstAncestor("CoreGui") then
+        return false
+    end
+
+    local name = part.Name:lower()
+    local parentName = part.Parent and part.Parent.Name:lower() or ""
+    local grandParentName = (part.Parent and part.Parent.Parent) and part.Parent.Parent.Name:lower() or ""
+
+    if name == "coinvisual" or name == "maincoin" or name == "coin" or name:find("coin") or name:find("token") or name:find("beachball") then
+        return true
+    end
+
+    if parentName:find("coincontainer") or parentName:find("coinserver") or parentName:find("coin") or grandParentName:find("coincontainer") then
+        return true
+    end
+
+    return false
+end
+
+local function getAllCoinsOnMap()
+    local coinList = {}
+    local seen = {}
+
+    -- Direct search inside any CoinContainer in workspace (e.g. workspace.MilBase.CoinContainer)
+    for _, desc in ipairs(workspace:GetDescendants()) do
+        if desc.Name == "CoinContainer" or desc.Name:lower():find("coincontainer") then
+            for _, coinDesc in ipairs(desc:GetDescendants()) do
+                if isValidCoin(coinDesc) and not seen[coinDesc] then
+                    seen[coinDesc] = true
+                    table.insert(coinList, coinDesc)
+                end
+            end
+        end
+    end
+
+    -- Universal fallback scan if CoinContainer is not uniquely named
+    if #coinList == 0 then
+        for _, desc in ipairs(workspace:GetDescendants()) do
+            if isValidCoin(desc) and not seen[desc] then
+                seen[desc] = true
+                table.insert(coinList, desc)
+            end
+        end
+    end
+
+    return coinList
+end
+
+local function fireNearbyCoinTouches(hrp, position, radius)
+    pcall(function()
+        if not firetouchinterest then return end
+        local char = hrp.Parent
+        if not char then return end
+
+        local coins = getAllCoinsOnMap()
+        for _, part in ipairs(coins) do
+            if (part.Position - position).Magnitude <= radius then
+                firetouchinterest(hrp, part, 0)
+                firetouchinterest(hrp, part, 1)
+
+                if part.Parent and part.Parent:IsA("BasePart") then
+                    firetouchinterest(hrp, part.Parent, 0)
+                    firetouchinterest(hrp, part.Parent, 1)
+                end
+
+                local torso = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso") or char:FindFirstChild("Head")
+                if torso then
+                    firetouchinterest(torso, part, 0)
+                    firetouchinterest(torso, part, 1)
+                end
+            end
+        end
+    end)
+end
+
+local function isPlayerInActiveRound()
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return false end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then return false end
+
+    -- Priority: Always active whenever coins exist on the map (even if spectating / waiting for turns)
+    local coins = getAllCoinsOnMap()
+    if #coins > 0 then return true end
+
+    if isSpectating() then return false end
+
+    local murderer = getPlayerByRole("Murderer")
+    local isSelfMurderer = (getPlayerRole(LocalPlayer) == "Murderer")
+    if not murderer and not isSelfMurderer then return false end
+
+    return true
+end
+
+local function getClosestSafeCoin()
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return nil, math.huge end
+    local hrp = char.HumanoidRootPart
+
+    local murderer = getPlayerByRole("Murderer")
+    local murHrp = (murderer and murderer.Character) and murderer.Character:FindFirstChild("HumanoidRootPart")
+
+    local closestCoin = nil
+    local shortestDist = math.huge
+
+    local coins = getAllCoinsOnMap()
+    for _, obj in ipairs(coins) do
+        if obj and obj.Parent then
+            local coinPos = obj:IsA("BasePart") and obj.Position or obj:GetPivot().Position
+            local safe = true
+            if murHrp and (coinPos - murHrp.Position).Magnitude < 22 then
+                safe = false
+            end
+
+            if safe then
+                local dist = (hrp.Position - coinPos).Magnitude
+                if dist < shortestDist then
+                    shortestDist = dist
+                    closestCoin = obj
+                end
+            end
+        end
+    end
+
+    return closestCoin, shortestDist
+end
+
+--------------------------------------------------------------------------------
+-- 5. Safe Glide Teleport Engine
+--------------------------------------------------------------------------------
+local function safeGlideToPosition(targetPos, speed)
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return false end
+    local hrp = char.HumanoidRootPart
+    local hum = char:FindFirstChildOfClass("Humanoid")
+
+    -- Enforce MM2 strict server speed threshold (<= 21.5 studs/sec) to avoid 'Invalid position' kick
+    local safeSpeed = math.clamp(speed, 5, 21.5)
+    local startPos = hrp.Position
+    local totalDist = (targetPos - startPos).Magnitude
+
+    if totalDist <= 1.2 then
+        hrp.CFrame = CFrame.new(targetPos)
+        fireNearbyCoinTouches(hrp, targetPos, 5)
+        return true
+    end
+
+    local travelTime = totalDist / safeSpeed
+    local startTime = tick()
+
+    local originalGravity = workspace.Gravity
+    workspace.Gravity = 0
+
+    local noclipConn = RunService.Stepped:Connect(function()
+        for _, p in ipairs(char:GetDescendants()) do
+            if p:IsA("BasePart") then p.CanCollide = false end
+        end
+    end)
+
+    local success = true
+    while (tick() - startTime) < travelTime do
+        if not Config.AutoFarmEnabled or not isPlayerInActiveRound() then
+            success = false
+            break
+        end
+
+        local elapsed = tick() - startTime
+        local alpha = math.clamp(elapsed / travelTime, 0, 1)
+        local currentTargetPos = startPos:Lerp(targetPos, alpha)
+
+        hrp.CFrame = CFrame.new(currentTargetPos)
+        hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+
+        fireNearbyCoinTouches(hrp, currentTargetPos, 6)
+        task.wait()
+    end
+
+    if success and Config.AutoFarmEnabled then
+        hrp.CFrame = CFrame.new(targetPos)
+        fireNearbyCoinTouches(hrp, targetPos, 6)
+    end
+
+    noclipConn:Disconnect()
+    workspace.Gravity = originalGravity
+    return success
+end
+
+--------------------------------------------------------------------------------
+-- 6. ESP Engine
+--------------------------------------------------------------------------------
+local ESPFolder = Instance.new("Folder")
+ESPFolder.Name = "Luno_MM2_ESP"
+pcall(function()
+    if gethui then ESPFolder.Parent = gethui()
+    else ESPFolder.Parent = game:GetService("CoreGui") end
+end)
+if not ESPFolder.Parent then ESPFolder.Parent = workspace end
+
+local function CleanupESP(name)
+    local c = ESPFolder:FindFirstChild(name)
+    if c then c:Destroy() end
+end
+
+local function UpdateESP()
+    if not Config.RoleESP and not Config.CoinESP then
+        ESPFolder:ClearAllChildren()
+        return
+    end
+
+    -- Role ESP
+    if Config.RoleESP then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                local char = player.Character
+                local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Head")
+                local hum  = char:FindFirstChildOfClass("Humanoid")
+                if root and hum and hum.Health > 0 then
+                    local role = getPlayerRole(player)
+                    local roleColor = Color3.fromRGB(0, 255, 120)
+                    if role == "Murderer" then roleColor = Color3.fromRGB(255, 50, 50)
+                    elseif role == "Sheriff" then roleColor = Color3.fromRGB(50, 150, 255) end
+
+                    local cName = "Role_" .. player.Name
+                    local container = ESPFolder:FindFirstChild(cName)
+                    if not container then
+                        container = Instance.new("Folder"); container.Name = cName; container.Parent = ESPFolder
+                    end
+
+                    local hl = container:FindFirstChildOfClass("Highlight")
+                    if not hl then
+                        hl = Instance.new("Highlight"); hl.Parent = container
+                    end
+                    hl.Adornee = char; hl.FillColor = roleColor; hl.FillTransparency = 0.5
+                    hl.OutlineColor = Color3.fromRGB(255, 255, 255); hl.OutlineTransparency = 0; hl.Enabled = true
+                else
+                    CleanupESP("Role_" .. player.Name)
+                end
+            else
+                CleanupESP("Role_" .. player.Name)
+            end
+        end
+    else
+        for _, child in ipairs(ESPFolder:GetChildren()) do
+            if child.Name:find("Role_") then child:Destroy() end
+        end
+    end
+
+    -- Coin ESP
+    if Config.CoinESP then
+        local coins = getAllCoinsOnMap()
+        for i, coin in ipairs(coins) do
+            if coin and coin.Parent then
+                local cName = "Coin_" .. tostring(i)
+                local container = ESPFolder:FindFirstChild(cName)
+                if not container then
+                    container = Instance.new("Folder"); container.Name = cName; container.Parent = ESPFolder
+                end
+
+                local hl = container:FindFirstChildOfClass("Highlight")
+                if not hl then
+                    hl = Instance.new("Highlight"); hl.Parent = container
+                end
+                hl.Adornee = coin; hl.FillColor = Color3.fromRGB(255, 215, 0); hl.FillTransparency = 0.3
+                hl.OutlineColor = Color3.fromRGB(255, 255, 255); hl.OutlineTransparency = 0; hl.Enabled = true
+            end
+        end
+    else
+        for _, child in ipairs(ESPFolder:GetChildren()) do
+            if child.Name:find("Coin_") then child:Destroy() end
+        end
+    end
+end
+
+--------------------------------------------------------------------------------
+-- 7. UI Library Framework (Standard Luno UI System)
+--------------------------------------------------------------------------------
+local Library = {}
+function Library:CreateWindow(title)
+    title = (title or "Luno MM2") .. " [Coin Farm 24/7]"
+    local SG = Instance.new("ScreenGui"); SG.Name="LunoMM2CoinFarm"; SG.ResetOnSpawn=false
+    SG.ZIndexBehavior=Enum.ZIndexBehavior.Sibling
+    pcall(function()
+        if gethui then SG.Parent=gethui()
+        elseif syn and syn.protect_gui then syn.protect_gui(SG); SG.Parent=game:GetService("CoreGui")
+        else SG.Parent=game:GetService("CoreGui") end
+    end)
+    if not SG.Parent then SG.Parent=LocalPlayer:WaitForChild("PlayerGui") end
+
+    local GlowFrame = Instance.new("Frame"); GlowFrame.Name="GlowFrame"
+    GlowFrame.Size=UDim2.new(0,456,0,306); GlowFrame.Position=UDim2.new(0.5,-228,0.5,-153)
+    GlowFrame.BackgroundColor3=Theme.Accent; GlowFrame.BorderSizePixel=0; GlowFrame.ZIndex=0
+    GlowFrame.Parent=SG
+    Instance.new("UICorner",GlowFrame).CornerRadius=UDim.new(0,10)
+
+    local MF = Instance.new("Frame"); MF.Name="MainFrame"; MF.Size=UDim2.new(0,450,0,300)
+    MF.Position=UDim2.new(0.5,-225,0.5,-150); MF.BackgroundColor3=Theme.MainBg
+    MF.BorderSizePixel=0; MF.ZIndex=1; MF.Parent=SG
+    Instance.new("UICorner",MF).CornerRadius=UDim.new(0,8)
+
+    local MS = Instance.new("UIStroke",MF)
+    MS.Color     = Color3.fromRGB(255,255,255)
+    MS.Thickness = 2
+    MS.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    local StrokeGradient = Instance.new("UIGradient",MS)
+    StrokeGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0,   Theme.Accent),
+        ColorSequenceKeypoint.new(0.5, Theme.MainBg),
+        ColorSequenceKeypoint.new(1,   Theme.Accent),
+    })
+    RunService.RenderStepped:Connect(function()
+        if StrokeGradient and StrokeGradient.Parent then
+            StrokeGradient.Rotation = (StrokeGradient.Rotation + 2) % 360
+        end
+    end)
+    local function SyncGlow()
+        local p = MF.Position
+        GlowFrame.Position = UDim2.new(p.X.Scale, p.X.Offset-3, p.Y.Scale, p.Y.Offset-3)
+    end
+    MF:GetPropertyChangedSignal("Position"):Connect(SyncGlow)
+
+    local TB = Instance.new("Frame",MF); TB.Size=UDim2.new(1,0,0,30); TB.BackgroundColor3=Theme.TopbarBg; TB.BorderSizePixel=0
+    Instance.new("UICorner",TB).CornerRadius=UDim.new(0,8)
+    local TL = Instance.new("TextLabel",TB); TL.Size=UDim2.new(1,-70,1,0); TL.Position=UDim2.new(0,10,0,0)
+    TL.BackgroundTransparency=1; TL.Text="🌙 "..title; TL.TextColor3=Theme.TextTitle
+    TL.Font=Enum.Font.GothamBold; TL.TextSize=13; TL.TextXAlignment=Enum.TextXAlignment.Left
+    local MinB = Instance.new("TextButton",TB); MinB.Size=UDim2.new(0,30,0,30); MinB.Position=UDim2.new(1,-60,0,0)
+    MinB.BackgroundTransparency=1; MinB.Text="-"; MinB.TextColor3=Theme.TextTitle; MinB.Font=Enum.Font.GothamBold; MinB.TextSize=16
+    local ClsB = Instance.new("TextButton",TB); ClsB.Size=UDim2.new(0,30,0,30); ClsB.Position=UDim2.new(1,-30,0,0)
+    ClsB.BackgroundTransparency=1; ClsB.Text="X"; ClsB.TextColor3=Theme.TextTitle; ClsB.Font=Enum.Font.GothamBold; ClsB.TextSize=13
+    ClsB.MouseButton1Click:Connect(function() SG:Destroy() end)
+
+    local TabBar = Instance.new("Frame",MF); TabBar.Name="TabBar"; TabBar.Size=UDim2.new(1,0,0,30)
+    TabBar.Position=UDim2.new(0,0,0,30); TabBar.BackgroundColor3=Theme.TabBg; TabBar.BorderSizePixel=0
+    local TBL = Instance.new("UIListLayout",TabBar); TBL.FillDirection=Enum.FillDirection.Horizontal; TBL.SortOrder=Enum.SortOrder.LayoutOrder
+
+    local CA = Instance.new("Frame",MF); CA.Name="ContentArea"; CA.Size=UDim2.new(1,0,1,-60)
+    CA.Position=UDim2.new(0,0,0,60); CA.BackgroundTransparency=1
+
+    local DL = Instance.new("TextLabel",CA); DL.Size=UDim2.new(0,150,0,20); DL.Position=UDim2.new(0,8,1,-20)
+    DL.BackgroundTransparency=1; DL.Text="discord.gg/lunohub"; DL.TextColor3=Theme.TextSub
+    DL.Font=Enum.Font.Gotham; DL.TextSize=10; DL.TextXAlignment=Enum.TextXAlignment.Left
+
+    local drag,ds,sp=false,nil,nil
+    TB.InputBegan:Connect(function(i)
+        if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
+            drag=true; ds=i.Position; sp=MF.Position
+            i.Changed:Connect(function() if i.UserInputState==Enum.UserInputState.End then drag=false end end)
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(i)
+        if drag and (i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch) then
+            local delta=i.Position-ds
+            MF.Position=UDim2.new(sp.X.Scale,sp.X.Offset+delta.X,sp.Y.Scale,sp.Y.Offset+delta.Y)
+        end
+    end)
+
+    local mini=false
+    MinB.MouseButton1Click:Connect(function()
+        mini=not mini; TabBar.Visible=not mini; CA.Visible=not mini
+        GlowFrame.Visible=not mini
+        MF.Size=mini and UDim2.new(0,450,0,30) or UDim2.new(0,450,0,300)
+    end)
+
+    UserInputService.InputBegan:Connect(function(i,gp)
+        if not gp and i.KeyCode==Enum.KeyCode.RightShift then SG.Enabled=not SG.Enabled end
+    end)
+
+    local Win={Tabs={},CurrentTab=nil}
+    function Win:AddTab(name)
+        local TBtn=Instance.new("TextButton",TabBar); TBtn.Size=UDim2.new(0,75,1,0)
+        TBtn.BackgroundColor3=Theme.TabBg; TBtn.BorderSizePixel=0; TBtn.Text=string.upper(name)
+        TBtn.TextColor3=Theme.TextTitle; TBtn.Font=Enum.Font.Gotham; TBtn.TextSize=11; TBtn.AutoButtonColor=false
+        local TC=Instance.new("ScrollingFrame",CA); TC.Size=UDim2.new(1,-20,1,-20); TC.Position=UDim2.new(0,10,0,10)
+        TC.BackgroundTransparency=1; TC.ScrollBarThickness=2; TC.Visible=false
+        local CL=Instance.new("UIListLayout",TC); CL.SortOrder=Enum.SortOrder.LayoutOrder; CL.Padding=UDim.new(0,4)
+        CL:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() TC.CanvasSize=UDim2.new(0,0,0,CL.AbsoluteContentSize.Y+10) end)
+        TBtn.MouseButton1Click:Connect(function()
+            for _,t in pairs(Win.Tabs) do t.Btn.BackgroundColor3=Theme.TabBg; t.Content.Visible=false end
+            TBtn.BackgroundColor3=Theme.TabActive; TC.Visible=true
+        end)
+        if not Win.CurrentTab then Win.CurrentTab=name; TBtn.BackgroundColor3=Theme.TabActive; TC.Visible=true end
+        table.insert(Win.Tabs,{Btn=TBtn,Content=TC})
+        local TabObj={}
+        function TabObj:AddSection(sn)
+            local Sp=Instance.new("Frame",TC); Sp.Size=UDim2.new(1,0,0,20); Sp.BackgroundTransparency=1
+            local SL=Instance.new("TextLabel",Sp); SL.Size=UDim2.new(1,0,1,0); SL.BackgroundTransparency=1
+            SL.Text=sn; SL.TextColor3=Theme.TextSub; SL.Font=Enum.Font.GothamSemibold; SL.TextSize=11; SL.TextXAlignment=Enum.TextXAlignment.Left
+            local SO={}
+            function SO:AddToggle(lbl,_,def,cb)
+                local TB2=Instance.new("TextButton",TC); TB2.Size=UDim2.new(1,0,0,28); TB2.BackgroundTransparency=1; TB2.Text=""; TB2.AutoButtonColor=false
+                local Box=Instance.new("Frame",TB2); Box.Size=UDim2.new(0,14,0,14); Box.Position=UDim2.new(0,4,0.5,-7)
+                Box.BackgroundColor3=def and Theme.Accent or Theme.TopbarBg; Box.BorderSizePixel=0
+                Instance.new("UICorner",Box).CornerRadius=UDim.new(0,3)
+                local TL2=Instance.new("TextLabel",TB2); TL2.Size=UDim2.new(1,-28,1,0); TL2.Position=UDim2.new(0,26,0,0)
+                TL2.BackgroundTransparency=1; TL2.Text=lbl; TL2.TextColor3=Theme.TextTitle; TL2.Font=Enum.Font.Gotham; TL2.TextSize=13; TL2.TextXAlignment=Enum.TextXAlignment.Left
+                local st=def or false
+                TB2.MouseButton1Click:Connect(function() st=not st; Box.BackgroundColor3=st and Theme.Accent or Theme.TopbarBg; cb(st) end)
+                if st then pcall(cb,st) end
+            end
+            function SO:AddSlider(lbl,mn,mx,dv,cb)
+                local SF=Instance.new("Frame",TC); SF.Size=UDim2.new(1,0,0,36); SF.BackgroundTransparency=1
+                local SLb=Instance.new("TextLabel",SF); SLb.Size=UDim2.new(1,-40,0,14); SLb.BackgroundTransparency=1
+                SLb.Text=lbl; SLb.TextColor3=Theme.TextTitle; SLb.Font=Enum.Font.Gotham; SLb.TextSize=12; SLb.TextXAlignment=Enum.TextXAlignment.Left
+                local VLb=Instance.new("TextLabel",SF); VLb.Size=UDim2.new(0,36,0,14); VLb.Position=UDim2.new(1,-36,0,0)
+                VLb.BackgroundTransparency=1; VLb.Text=tostring(dv); VLb.TextColor3=Theme.TextTitle; VLb.Font=Enum.Font.Gotham; VLb.TextSize=12; VLb.TextXAlignment=Enum.TextXAlignment.Right
+                local Tr=Instance.new("TextButton",SF); Tr.Size=UDim2.new(1,0,0,6); Tr.Position=UDim2.new(0,0,0,20)
+                Tr.BackgroundColor3=Theme.TopbarBg; Tr.BorderSizePixel=0; Tr.Text=""; Tr.AutoButtonColor=false
+                Instance.new("UICorner",Tr).CornerRadius=UDim.new(1,0)
+                local Fi=Instance.new("Frame",Tr); local ip=math.clamp((dv-mn)/(mx-mn),0,1)
+                Fi.Size=UDim2.new(ip,0,1,0); Fi.BackgroundColor3=Theme.Accent; Fi.BorderSizePixel=0
+                Instance.new("UICorner",Fi).CornerRadius=UDim.new(1,0)
+                local sl=false
+                Tr.MouseButton1Down:Connect(function() sl=true end)
+                UserInputService.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then sl=false end end)
+                UserInputService.InputChanged:Connect(function(i)
+                    if sl and i.UserInputType==Enum.UserInputType.MouseMovement then
+                        local p=math.clamp((i.Position.X-Tr.AbsolutePosition.X)/Tr.AbsoluteSize.X,0,1)
+                        Fi.Size=UDim2.new(p,0,1,0); local v=math.floor(mn+(mx-mn)*p); VLb.Text=tostring(v); cb(v)
+                    end
+                end)
+                pcall(cb,dv)
+            end
+            function SO:AddButton(lbl,cb)
+                local Btn=Instance.new("TextButton",TC); Btn.Size=UDim2.new(1,-8,0,28); Btn.Position=UDim2.new(0,4,0,0)
+                Btn.BackgroundColor3=Theme.TopbarBg; Btn.BorderSizePixel=0; Btn.Text=lbl; Btn.TextColor3=Theme.TextTitle
+                Btn.Font=Enum.Font.Gotham; Btn.TextSize=13; Btn.AutoButtonColor=false
+                Instance.new("UICorner",Btn).CornerRadius=UDim.new(0,4)
+                Btn.MouseButton1Click:Connect(cb)
+                Btn.MouseEnter:Connect(function() Btn.BackgroundColor3=Color3.fromRGB(40,40,55) end)
+                Btn.MouseLeave:Connect(function() Btn.BackgroundColor3=Theme.TopbarBg end)
+            end
+            return SO
+        end
+        return TabObj
+    end
+    return Win
+end
+
+--------------------------------------------------------------------------------
+-- 8. Initialize Window & Sections
+--------------------------------------------------------------------------------
+local Window      = Library:CreateWindow("Luno MM2")
+local FarmTab     = Window:AddTab("Farm")
+local VisualsTab  = Window:AddTab("Visuals")
+local WorldTab    = Window:AddTab("World")
+local SettingsTab = Window:AddTab("Settings")
+
+-- FARM TAB UI COMPONENTS
+local F1 = FarmTab:AddSection("24/7 Pure Coin Farm")
+F1:AddToggle("Auto Coin Farm", "", true, function(v) Config.AutoFarmEnabled = v end)
+F1:AddSlider("Glide Speed (studs/s)", 10, 22, 21.5, function(v) Config.FarmSpeed = v end)
+
+-- Status & Live Dashboard Elements
+local FarmContentArea = FarmTab.Tabs and FarmTab.Tabs[1] and FarmTab.Tabs[1].Content
+
+local StatsCard = Instance.new("Frame", FarmContentArea)
+StatsCard.Size = UDim2.new(1, -8, 0, 50)
+StatsCard.Position = UDim2.new(0, 4, 0, 65)
+StatsCard.BackgroundColor3 = Theme.TopbarBg
+StatsCard.BorderSizePixel = 0
+Instance.new("UICorner", StatsCard).CornerRadius = UDim.new(0, 6)
+
+local SessionStatLabel = Instance.new("TextLabel", StatsCard)
+SessionStatLabel.Size = UDim2.new(0.48, 0, 1, 0)
+SessionStatLabel.Position = UDim2.new(0, 10, 0, 0)
+SessionStatLabel.BackgroundTransparency = 1
+SessionStatLabel.Text = "SESSION COINS\n0"
+SessionStatLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+SessionStatLabel.Font = Enum.Font.GothamBold
+SessionStatLabel.TextSize = 11
+SessionStatLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local BagStatLabel = Instance.new("TextLabel", StatsCard)
+BagStatLabel.Size = UDim2.new(0.48, 0, 1, 0)
+BagStatLabel.Position = UDim2.new(0.5, -10, 0, 0)
+BagStatLabel.BackgroundTransparency = 1
+BagStatLabel.Text = "BAG CAPACITY\n0 / 40"
+BagStatLabel.TextColor3 = Color3.fromRGB(0, 220, 255)
+BagStatLabel.Font = Enum.Font.GothamBold
+BagStatLabel.TextSize = 11
+BagStatLabel.TextXAlignment = Enum.TextXAlignment.Right
+
+local StatusPill = Instance.new("TextLabel", FarmContentArea)
+StatusPill.Size = UDim2.new(1, -8, 0, 26)
+StatusPill.Position = UDim2.new(0, 4, 0, 122)
+StatusPill.BackgroundColor3 = Color3.fromRGB(18, 20, 28)
+StatusPill.Text = "Status: ⏳ Waiting in Lobby..."
+StatusPill.TextColor3 = Color3.fromRGB(160, 170, 195)
+StatusPill.Font = Enum.Font.GothamMedium
+StatusPill.TextSize = 11
+Instance.new("UICorner", StatusPill).CornerRadius = UDim.new(0, 6)
+
+-- VISUALS TAB
+local V1 = VisualsTab:AddSection("ESP Highlights")
+V1:AddToggle("Coin ESP Highlights",  "", true, function(v) Config.CoinESP = v end)
+V1:AddToggle("Player Role Highlights", "", true, function(v) Config.RoleESP = v end)
+
+-- WORLD TAB
+local W1 = WorldTab:AddSection("Utilities & Movement")
+W1:AddToggle("Anti-AFK Protection", "", true, function(v) Config.AntiAFK = v end)
+W1:AddToggle("Fullbright",          "", false, function(v)
+    Config.Fullbright = v
+    if not v then
+        Lighting.Ambient = OriginalLighting.Ambient
+        Lighting.OutdoorAmbient = OriginalLighting.OutdoorAmbient
+        Lighting.Brightness = OriginalLighting.Brightness
+    end
+end)
+W1:AddSlider("WalkSpeed", 16, 100, 16, function(v)
+    Config.WalkSpeed = v
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+        LocalPlayer.Character:FindFirstChildOfClass("Humanoid").WalkSpeed = v
+    end
+end)
+
+local renderConn = nil
+
+-- SETTINGS TAB
+local function UnloadScript()
+    scriptRunning = false
+    Config.AutoFarmEnabled = false
+    Config.CoinESP = false
+    Config.RoleESP = false
+    Config.Fullbright = false
+    Config.AntiAFK = false
+
+    if renderConn then
+        pcall(function() renderConn:Disconnect() end)
+    end
+    if idleConn then
+        pcall(function() idleConn:Disconnect() end)
+    end
+
+    workspace.Gravity = 196
+    if LocalPlayer.Character then
+        local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum then hum.WalkSpeed = 16 end
+        local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+            hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+        end
+    end
+
+    if ESPFolder then
+        pcall(function() ESPFolder:Destroy() end)
+    end
+
+    if Lighting and OriginalLighting then
+        Lighting.Ambient = OriginalLighting.Ambient
+        Lighting.OutdoorAmbient = OriginalLighting.OutdoorAmbient
+        Lighting.Brightness = OriginalLighting.Brightness
+    end
+
+    local g = game:GetService("CoreGui"):FindFirstChild("LunoMM2CoinFarm")
+    if g then g:Destroy() end
+
+    local pGuiG = LocalPlayer:FindFirstChild("PlayerGui") and LocalPlayer.PlayerGui:FindFirstChild("LunoMM2CoinFarm")
+    if pGuiG then pGuiG:Destroy() end
+end
+
+local S1 = SettingsTab:AddSection("Script Controls")
+S1:AddButton("Unload Script", UnloadScript)
+S1:AddButton("Rejoin Server", function()
+    pcall(function() TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer) end)
+end)
+S1:AddButton("Server Hop", function()
+    pcall(function()
+        local req = (syn and syn.request) or http_request or request
+        if req then
+            local res = req({Url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100", Method = "GET"})
+            local body = game:GetService("HttpService"):JSONDecode(res.Body)
+            if body and body.data then
+                for _, sv in ipairs(body.data) do
+                    if sv.playing < sv.maxPlayers and sv.id ~= game.JobId then
+                        TeleportService:TeleportToPlaceInstance(game.PlaceId, sv.id, LocalPlayer)
+                        return
+                    end
+                end
+            end
+        end
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    end)
+end)
+
+--------------------------------------------------------------------------------
+-- 9. Master Coin Farm & Dashboard Synchronization Loop
+--------------------------------------------------------------------------------
+renderConn = RunService.RenderStepped:Connect(function()
+    if not scriptRunning then return end
+    if Config.Fullbright then
+        Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+        Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+        Lighting.Brightness = 2
+    end
+    UpdateESP()
+end)
+
+task.spawn(function()
+    while scriptRunning do
+        task.wait(0.2)
+        if not scriptRunning then break end
+        if not Config.AutoFarmEnabled then
+            StatusPill.Text = "Status: 🔴 Farm Paused"
+            StatusPill.TextColor3 = Color3.fromRGB(255, 100, 100)
+            isBusy = false
+        elseif isPlayerInActiveRound() then
+            local liveCoins = getActualCoinsFromGame()
+            if liveCoins ~= nil then
+                if liveCoins > currentRoundCoins then
+                    local diff = (liveCoins - currentRoundCoins)
+                    sessionCoinsCollected = sessionCoinsCollected + diff
+                    currentRoundCoins = liveCoins
+                elseif liveCoins < currentRoundCoins and liveCoins == 0 then
+                    currentRoundCoins = 0
+                end
+                lastRecordedBag = liveCoins
+            end
+
+            SessionStatLabel.Text = string.format("SESSION COINS\n%d", sessionCoinsCollected)
+            BagStatLabel.Text = string.format("BAG CAPACITY\n%d / %d", currentRoundCoins, Config.MAX_BAG_CAP)
+
+            if currentRoundCoins >= Config.MAX_BAG_CAP then
+                StatusPill.Text = "Status: 🎒 Bag FULL (40/40) — Waiting for Round End..."
+                StatusPill.TextColor3 = Color3.fromRGB(255, 215, 0)
+                isBusy = false
+            else
+                local targetCoin, dist = getClosestSafeCoin()
+                if targetCoin then
+                    StatusPill.Text = string.format("Status: ⚡ Collecting Coin (%d studs)...", math.floor(dist))
+                    StatusPill.TextColor3 = Color3.fromRGB(0, 240, 150)
+
+                    isBusy = true
+                    local coinPos = targetCoin:IsA("BasePart") and targetCoin.Position or targetCoin:GetPivot().Position
+                    local ok = safeGlideToPosition(coinPos, Config.FarmSpeed)
+
+                    if not ok then
+                        coinFailTracker[targetCoin] = (coinFailTracker[targetCoin] or 0) + 1
+                        if coinFailTracker[targetCoin] >= 2 then
+                            coinBlacklist[targetCoin] = tick() + 6
+                        end
+                    else
+                        coinFailTracker[targetCoin] = nil
+                    end
+
+                    task.wait(0.01)
+                    local afterCoins = getActualCoinsFromGame()
+                    if afterCoins ~= nil then
+                        if afterCoins > currentRoundCoins then
+                            sessionCoinsCollected = sessionCoinsCollected + (afterCoins - currentRoundCoins)
+                            currentRoundCoins = afterCoins
+                        end
+                    else
+                        currentRoundCoins = math.min(currentRoundCoins + 1, Config.MAX_BAG_CAP)
+                        sessionCoinsCollected = sessionCoinsCollected + 1
+                    end
+
+                    SessionStatLabel.Text = string.format("SESSION COINS\n%d", sessionCoinsCollected)
+                    BagStatLabel.Text = string.format("BAG CAPACITY\n%d / %d", currentRoundCoins, Config.MAX_BAG_CAP)
+                    isBusy = false
+                else
+                    StatusPill.Text = "Status: 🔍 Round Active — Searching for Coins..."
+                    StatusPill.TextColor3 = Color3.fromRGB(180, 190, 210)
+                    isBusy = false
+                    task.wait(0.03)
+                end
+            end
+        else
+            currentRoundCoins = 0
+            BagStatLabel.Text = string.format("BAG CAPACITY\n0 / %d", Config.MAX_BAG_CAP)
+            StatusPill.Text = "Status: ⏳ Waiting in Lobby for Round Start..."
+            StatusPill.TextColor3 = Color3.fromRGB(160, 170, 195)
+            isBusy = false
+            task.wait(0.5)
+        end
+    end
+end)
+
+print("[Luno]")
