@@ -1,0 +1,679 @@
+-- ====================================================================
+-- LUNO ARSENAL | Full Rewrite - Fixed Backend
+-- ====================================================================
+
+local TweenService     = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService       = game:GetService("RunService")
+local Players          = game:GetService("Players")
+local Lighting         = game:GetService("Lighting")
+local TeleportService  = game:GetService("TeleportService")
+local LocalPlayer      = Players.LocalPlayer
+local Camera           = workspace.CurrentCamera
+
+local Theme = {
+    MainBg    = Color3.fromRGB(15, 15, 20),
+    TopbarBg  = Color3.fromRGB(25, 25, 30),
+    TabBg     = Color3.fromRGB(20, 20, 25),
+    TabActive = Color3.fromRGB(35, 35, 45),
+    Accent    = Color3.fromRGB(138, 43, 226),
+    TextTitle = Color3.fromRGB(255, 255, 255),
+    TextSub   = Color3.fromRGB(170, 170, 180),
+}
+
+local Config = {
+    Aimbot=false, HoldToAim=true, AimbotSmoothness=1, WallCheck=true, FOV=100,
+    ShowFOV=true, SilentAim=false,
+    ESP=false, BoxESP=true, NameESP=true,
+    HealthBar=true, Chams=true, Tracers=false, TeamCheck=true,
+    InfiniteAmmo=false, NoRecoil=false, RapidFire=false,
+    EnableSpeed=false, WalkSpeed=16, EnableJump=false, JumpPower=50,
+    InfiniteJump=false, Noclip=false, Fullbright=false, NightMode=false,
+    NoShadows=false, NoFog=false, FPSBoost=false, TimeOfDay=12,
+    Gravity=196, CameraFOV=70,
+    MaxDist=300,
+}
+
+local OriginalLighting = {
+    Ambient = Lighting.Ambient, OutdoorAmbient = Lighting.OutdoorAmbient,
+    Brightness = Lighting.Brightness, GlobalShadows = Lighting.GlobalShadows,
+    FogEnd = Lighting.FogEnd,
+}
+
+-- ESP ENGINE (defined FIRST)
+local ESPFolder = Instance.new("Folder")
+ESPFolder.Name = "Luno_Arsenal_ESP"
+pcall(function()
+    if gethui then ESPFolder.Parent = gethui()
+    else ESPFolder.Parent = game:GetService("CoreGui") end
+end)
+if not ESPFolder.Parent then ESPFolder.Parent = workspace end
+
+local Tracers = {}
+
+local function CleanupPlayerESP(player)
+    local c = ESPFolder:FindFirstChild("ESP_" .. player.Name)
+    if c then c:Destroy() end
+    if Tracers[player] then
+        pcall(function() Tracers[player]:Remove() end)
+        Tracers[player] = nil
+    end
+end
+
+local function UpdatePlayerESP(player)
+    if player == LocalPlayer then return end
+    local char = player.Character
+    if not char then CleanupPlayerESP(player) return end
+    local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Head")
+    local hum  = char:FindFirstChildOfClass("Humanoid")
+    if not Config.ESP and not Config.Tracers then CleanupPlayerESP(player) return end
+    if not root or not hum or hum.Health <= 0 then CleanupPlayerESP(player) return end
+    local isTeam = false
+    if Config.TeamCheck and player.Team and LocalPlayer.Team and player.Team == LocalPlayer.Team then isTeam = true end
+    if isTeam then CleanupPlayerESP(player) return end
+
+    if Config.ESP then
+        local cn = "ESP_" .. player.Name
+        local container = ESPFolder:FindFirstChild(cn)
+        if not container then container = Instance.new("Folder"); container.Name = cn; container.Parent = ESPFolder end
+
+        local hl = container:FindFirstChildOfClass("Highlight")
+        if Config.Chams then
+            if not hl then hl = Instance.new("Highlight"); hl.Parent = container end
+            hl.Adornee = char; hl.FillColor = Theme.Accent; hl.FillTransparency = 0.5
+            hl.OutlineColor = Color3.fromRGB(255,255,255); hl.OutlineTransparency = 0; hl.Enabled = true
+        elseif hl then hl.Enabled = false end
+
+        local bb = container:FindFirstChildOfClass("BillboardGui")
+        if not bb then
+            bb = Instance.new("BillboardGui"); bb.Name = "BB"; bb.AlwaysOnTop = true
+            bb.Size = UDim2.new(4.5,0,6,0); bb.StudsOffset = Vector3.new(0,0,0); bb.Parent = container
+            local bf = Instance.new("Frame"); bf.Name="BoxFrame"; bf.Size=UDim2.new(1,0,1,0)
+            bf.BackgroundTransparency=1; bf.BorderColor3=Theme.Accent; bf.BorderSizePixel=2; bf.Parent=bb
+            local nl = Instance.new("TextLabel"); nl.Name="NameLabel"; nl.Size=UDim2.new(1,0,0,15)
+            nl.Position=UDim2.new(0,0,0,-18); nl.BackgroundTransparency=1; nl.TextColor3=Color3.fromRGB(255,255,255)
+            nl.Font=Enum.Font.GothamBold; nl.TextSize=11; nl.TextStrokeTransparency=0
+            nl.TextXAlignment=Enum.TextXAlignment.Center; nl.Parent=bb
+            local hbg = Instance.new("Frame"); hbg.Name="HBg"; hbg.Size=UDim2.new(0,4,1,0)
+            hbg.Position=UDim2.new(0,-8,0,0); hbg.BackgroundColor3=Color3.fromRGB(20,20,20)
+            hbg.BorderSizePixel=1; hbg.Parent=bb
+            local hfl = Instance.new("Frame"); hfl.Name="HFl"; hfl.Size=UDim2.new(1,0,1,0)
+            hfl.BackgroundColor3=Color3.fromRGB(0,255,100); hfl.BorderSizePixel=0; hfl.Parent=hbg
+        end
+        bb.Adornee = root
+        local bf2 = bb:FindFirstChild("BoxFrame"); if bf2 then bf2.Visible = Config.BoxESP end
+        local nl2 = bb:FindFirstChild("NameLabel")
+        if nl2 then nl2.Visible = Config.NameESP
+            if Config.NameESP then
+                local d = math.floor((root.Position - Camera.CFrame.Position).Magnitude)
+                nl2.Text = player.Name.." ["..d.."m]"
+            end
+        end
+        local hbg2 = bb:FindFirstChild("HBg"); if hbg2 then hbg2.Visible = Config.HealthBar
+            local hfl2 = hbg2:FindFirstChild("HFl")
+            if hfl2 and hum then
+                local pct = math.clamp(hum.Health/hum.MaxHealth,0,1)
+                hfl2.Size = UDim2.new(1,0,pct,0); hfl2.Position = UDim2.new(0,0,1-pct,0)
+                if pct > 0.5 then hfl2.BackgroundColor3 = Color3.fromRGB(math.floor(255*(1-pct)*2),255,0)
+                else hfl2.BackgroundColor3 = Color3.fromRGB(255,math.floor(255*pct*2),0) end
+            end
+        end
+    else
+        local c2 = ESPFolder:FindFirstChild("ESP_"..player.Name); if c2 then c2:Destroy() end
+    end
+
+    if Config.Tracers and Drawing then
+        local pos, onSc = Camera:WorldToViewportPoint(root.Position)
+        if onSc then
+            if not Tracers[player] then
+                local ln = Drawing.new("Line"); ln.Thickness=1.5; ln.Color=Theme.Accent
+                ln.Transparency=1; Tracers[player]=ln
+            end
+            local ln = Tracers[player]
+            ln.From=Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y)
+            ln.To=Vector2.new(pos.X,pos.Y); ln.Visible=true
+        else if Tracers[player] then Tracers[player].Visible=false end end
+    else if Tracers[player] then Tracers[player].Visible=false end end
+end
+
+-- COMBAT ENGINE
+-- Advanced visibility: 3-ray multi-point check (head, HRP, torso)
+-- Returns true only if at least 2 of 3 points are unobstructed
+local function IsVisible(character)
+    if not Config.WallCheck then return true end
+    local cam = workspace.CurrentCamera
+    if not cam then return false end
+    local origin = cam.CFrame.Position
+
+    local checkParts = {
+        character:FindFirstChild("Head"),
+        character:FindFirstChild("HumanoidRootPart"),
+        character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso"),
+    }
+
+    local rp = RaycastParams.new()
+    rp.FilterType = Enum.RaycastFilterType.Exclude
+    rp.FilterDescendantsInstances = {LocalPlayer.Character, character}
+    rp.IgnoreWater = true
+
+    local hits = 0
+    for _, part in ipairs(checkParts) do
+        if part then
+            local dir = part.Position - origin
+            local result = workspace:Raycast(origin, dir, rp)
+            if result == nil then
+                hits += 1
+            end
+        end
+    end
+    return hits >= 2
+end
+
+-- Advanced target selection:
+-- Scores by screen FOV distance + world distance, requires on-screen + visible + within MaxDist
+local function GetTarget()
+    local cam = workspace.CurrentCamera
+    if not cam then return nil, nil end
+    local mp = UserInputService:GetMouseLocation()
+    local cp, ct = nil, nil
+    local bestScore = math.huge
+
+    for _, pl in ipairs(Players:GetPlayers()) do
+        if pl ~= LocalPlayer then
+            local isT = Config.TeamCheck and pl.Team and LocalPlayer.Team and pl.Team == LocalPlayer.Team
+            if not isT then
+                local ch = pl.Character
+                if ch then
+                    local hu = ch:FindFirstChildOfClass("Humanoid")
+                    local hrp = ch:FindFirstChild("HumanoidRootPart")
+                    if hu and hrp and hu.Health > 0 then
+                        -- World distance gate — ignore players too far away
+                        local worldDist = (hrp.Position - cam.CFrame.Position).Magnitude
+                        if worldDist <= Config.MaxDist then
+                            local head = ch:FindFirstChild("Head") or hrp
+                            local sp, onScreen = cam:WorldToViewportPoint(head.Position)
+                            if onScreen then
+                                local screenDist = (Vector2.new(sp.X, sp.Y) - mp).Magnitude
+                                if screenDist <= Config.FOV then
+                                    if IsVisible(ch) then
+                                        -- Combined score: screen FOV closeness + normalised world distance
+                                        local score = screenDist + (worldDist / Config.MaxDist) * 50
+                                        if score < bestScore then
+                                            bestScore = score
+                                            cp = pl
+                                            ct = head
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return ct, cp
+end
+
+-- Silent Aim Hook
+pcall(function()
+    if not (getrawmetatable and setreadonly) then return end
+    local grm = getrawmetatable(game); if not grm then return end
+    local oNC = grm.__namecall; local oIdx = grm.__index
+    local cc = checkcaller or function() return false end
+    setreadonly(grm, false)
+    grm.__namecall = newcclosure(function(self, ...)
+        local m = getnamecallmethod and getnamecallmethod() or ""
+        if Config.SilentAim and not cc() then
+            if m=="FindPartOnWithIgnoreList" or m=="Raycast" or m=="raycast" then
+                local t = GetTarget()
+                if t then
+                    local a = {...}
+                    if a[1] and a[1].Origin then
+                        local o = a[1].Origin; a[1]=Ray.new(o,(t.Position-o).Unit*1000)
+                        return oNC(self,unpack(a))
+                    end
+                end
+            end
+        end
+        return oNC(self,...)
+    end)
+    grm.__index = newcclosure(function(self, key)
+        if Config.SilentAim and not cc() then
+            if self == LocalPlayer:GetMouse() then
+                if key=="Hit" or key=="hit" then local t=GetTarget(); if t then return t.CFrame end
+                elseif key=="Target" or key=="target" then local t=GetTarget(); if t then return t end end
+            end
+        end
+        return oIdx(self, key)
+    end)
+    setreadonly(grm, true)
+end)
+
+local FOVCircle = nil
+pcall(function()
+    if Drawing then
+        FOVCircle = Drawing.new("Circle"); FOVCircle.Radius=Config.FOV; FOVCircle.Filled=false
+        FOVCircle.Color=Color3.fromRGB(255,255,255); FOVCircle.Visible=false
+        FOVCircle.Thickness=1; FOVCircle.Transparency=1
+        FOVCircle.Position=Vector2.new(Camera.ViewportSize.X/2,Camera.ViewportSize.Y/2)
+    end
+end)
+
+-- ====================================================================
+-- UI LIBRARY
+-- ====================================================================
+local Library = {}
+function Library:CreateWindow(title)
+    title = (title or "Luno") .. " [BETA]"
+    local SG = Instance.new("ScreenGui"); SG.Name="LunoArsenalFlat"; SG.ResetOnSpawn=false
+    SG.ZIndexBehavior=Enum.ZIndexBehavior.Sibling
+    pcall(function()
+        if gethui then SG.Parent=gethui()
+        elseif syn and syn.protect_gui then syn.protect_gui(SG); SG.Parent=game:GetService("CoreGui")
+        else SG.Parent=game:GetService("CoreGui") end
+    end)
+    if not SG.Parent then SG.Parent=LocalPlayer:WaitForChild("PlayerGui") end
+
+    -- Glow shadow frame (sits behind MainFrame)
+    local GlowFrame = Instance.new("Frame"); GlowFrame.Name="GlowFrame"
+    GlowFrame.Size=UDim2.new(0,456,0,306); GlowFrame.Position=UDim2.new(0.5,-228,0.5,-153)
+    GlowFrame.BackgroundColor3=Theme.Accent; GlowFrame.BorderSizePixel=0; GlowFrame.ZIndex=0
+    GlowFrame.Parent=SG
+    Instance.new("UICorner",GlowFrame).CornerRadius=UDim.new(0,10)
+
+    local MF = Instance.new("Frame"); MF.Name="MainFrame"; MF.Size=UDim2.new(0,450,0,300)
+    MF.Position=UDim2.new(0.5,-225,0.5,-150); MF.BackgroundColor3=Theme.MainBg
+    MF.BorderSizePixel=0; MF.ZIndex=1; MF.Parent=SG
+    Instance.new("UICorner",MF).CornerRadius=UDim.new(0,8)
+    -- Animated border — same rotating gradient as MM2 Combat
+    local MS = Instance.new("UIStroke",MF)
+    MS.Color     = Color3.fromRGB(255,255,255)
+    MS.Thickness = 2
+    MS.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    local StrokeGradient = Instance.new("UIGradient",MS)
+    StrokeGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0,   Theme.Accent),
+        ColorSequenceKeypoint.new(0.5, Theme.MainBg),
+        ColorSequenceKeypoint.new(1,   Theme.Accent),
+    })
+    RunService.RenderStepped:Connect(function()
+        if StrokeGradient and StrokeGradient.Parent then
+            StrokeGradient.Rotation = (StrokeGradient.Rotation + 2) % 360
+        end
+    end)
+    -- Sync GlowFrame position with MainFrame when dragged
+    local function SyncGlow()
+        local p = MF.Position
+        GlowFrame.Position = UDim2.new(p.X.Scale, p.X.Offset-3, p.Y.Scale, p.Y.Offset-3)
+    end
+    MF:GetPropertyChangedSignal("Position"):Connect(SyncGlow)
+
+    local TB = Instance.new("Frame",MF); TB.Size=UDim2.new(1,0,0,30); TB.BackgroundColor3=Theme.TopbarBg; TB.BorderSizePixel=0
+    Instance.new("UICorner",TB).CornerRadius=UDim.new(0,8)
+    local TL = Instance.new("TextLabel",TB); TL.Size=UDim2.new(1,-70,1,0); TL.Position=UDim2.new(0,10,0,0)
+    TL.BackgroundTransparency=1; TL.Text="🌙 "..title; TL.TextColor3=Theme.TextTitle
+    TL.Font=Enum.Font.GothamBold; TL.TextSize=13; TL.TextXAlignment=Enum.TextXAlignment.Left
+    local MinB = Instance.new("TextButton",TB); MinB.Size=UDim2.new(0,30,0,30); MinB.Position=UDim2.new(1,-60,0,0)
+    MinB.BackgroundTransparency=1; MinB.Text="-"; MinB.TextColor3=Theme.TextTitle; MinB.Font=Enum.Font.GothamBold; MinB.TextSize=16
+    local ClsB = Instance.new("TextButton",TB); ClsB.Size=UDim2.new(0,30,0,30); ClsB.Position=UDim2.new(1,-30,0,0)
+    ClsB.BackgroundTransparency=1; ClsB.Text="X"; ClsB.TextColor3=Theme.TextTitle; ClsB.Font=Enum.Font.GothamBold; ClsB.TextSize=13
+    ClsB.MouseButton1Click:Connect(function() SG:Destroy() end)
+
+    local TabBar = Instance.new("Frame",MF); TabBar.Name="TabBar"; TabBar.Size=UDim2.new(1,0,0,30)
+    TabBar.Position=UDim2.new(0,0,0,30); TabBar.BackgroundColor3=Theme.TabBg; TabBar.BorderSizePixel=0
+    local TBL = Instance.new("UIListLayout",TabBar); TBL.FillDirection=Enum.FillDirection.Horizontal; TBL.SortOrder=Enum.SortOrder.LayoutOrder
+
+    local CA = Instance.new("Frame",MF); CA.Name="ContentArea"; CA.Size=UDim2.new(1,0,1,-60)
+    CA.Position=UDim2.new(0,0,0,60); CA.BackgroundTransparency=1
+
+    local DL = Instance.new("TextLabel",CA); DL.Size=UDim2.new(0,150,0,20); DL.Position=UDim2.new(0,8,1,-20)
+    DL.BackgroundTransparency=1; DL.Text="discord.gg/lunohub"; DL.TextColor3=Theme.TextSub
+    DL.Font=Enum.Font.Gotham; DL.TextSize=10; DL.TextXAlignment=Enum.TextXAlignment.Left
+
+    -- Drag
+    local drag,ds,sp=false,nil,nil
+    TB.InputBegan:Connect(function(i)
+        if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
+            drag=true; ds=i.Position; sp=MF.Position
+            i.Changed:Connect(function() if i.UserInputState==Enum.UserInputState.End then drag=false end end)
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(i)
+        if drag and (i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch) then
+            local delta=i.Position-ds
+            MF.Position=UDim2.new(sp.X.Scale,sp.X.Offset+delta.X,sp.Y.Scale,sp.Y.Offset+delta.Y)
+        end
+    end)
+
+    -- Minimize
+    local mini=false
+    MinB.MouseButton1Click:Connect(function()
+        mini=not mini; TabBar.Visible=not mini; CA.Visible=not mini
+        GlowFrame.Visible=not mini
+        MF.Size=mini and UDim2.new(0,450,0,30) or UDim2.new(0,450,0,300)
+    end)
+
+    UserInputService.InputBegan:Connect(function(i,gp)
+        if not gp and i.KeyCode==Enum.KeyCode.RightShift then SG.Enabled=not SG.Enabled end
+    end)
+
+    local Win={Tabs={},CurrentTab=nil}
+    function Win:AddTab(name)
+        local TBtn=Instance.new("TextButton",TabBar); TBtn.Size=UDim2.new(0,70,1,0)
+        TBtn.BackgroundColor3=Theme.TabBg; TBtn.BorderSizePixel=0; TBtn.Text=string.upper(name)
+        TBtn.TextColor3=Theme.TextTitle; TBtn.Font=Enum.Font.Gotham; TBtn.TextSize=11; TBtn.AutoButtonColor=false
+        local TC=Instance.new("ScrollingFrame",CA); TC.Size=UDim2.new(1,-20,1,-20); TC.Position=UDim2.new(0,10,0,10)
+        TC.BackgroundTransparency=1; TC.ScrollBarThickness=2; TC.Visible=false
+        local CL=Instance.new("UIListLayout",TC); CL.SortOrder=Enum.SortOrder.LayoutOrder; CL.Padding=UDim.new(0,4)
+        CL:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() TC.CanvasSize=UDim2.new(0,0,0,CL.AbsoluteContentSize.Y+10) end)
+        TBtn.MouseButton1Click:Connect(function()
+            for _,t in pairs(Win.Tabs) do t.Btn.BackgroundColor3=Theme.TabBg; t.Content.Visible=false end
+            TBtn.BackgroundColor3=Theme.TabActive; TC.Visible=true
+        end)
+        if not Win.CurrentTab then Win.CurrentTab=name; TBtn.BackgroundColor3=Theme.TabActive; TC.Visible=true end
+        table.insert(Win.Tabs,{Btn=TBtn,Content=TC})
+        local TabObj={}
+        function TabObj:AddSection(sn)
+            local Sp=Instance.new("Frame",TC); Sp.Size=UDim2.new(1,0,0,20); Sp.BackgroundTransparency=1
+            local SL=Instance.new("TextLabel",Sp); SL.Size=UDim2.new(1,0,1,0); SL.BackgroundTransparency=1
+            SL.Text=sn; SL.TextColor3=Theme.TextSub; SL.Font=Enum.Font.GothamSemibold; SL.TextSize=11; SL.TextXAlignment=Enum.TextXAlignment.Left
+            local SO={}
+            function SO:AddToggle(lbl,_,def,cb)
+                local TB2=Instance.new("TextButton",TC); TB2.Size=UDim2.new(1,0,0,28); TB2.BackgroundTransparency=1; TB2.Text=""; TB2.AutoButtonColor=false
+                local Box=Instance.new("Frame",TB2); Box.Size=UDim2.new(0,14,0,14); Box.Position=UDim2.new(0,4,0.5,-7)
+                Box.BackgroundColor3=def and Theme.Accent or Theme.TopbarBg; Box.BorderSizePixel=0
+                Instance.new("UICorner",Box).CornerRadius=UDim.new(0,3)
+                local TL2=Instance.new("TextLabel",TB2); TL2.Size=UDim2.new(1,-28,1,0); TL2.Position=UDim2.new(0,26,0,0)
+                TL2.BackgroundTransparency=1; TL2.Text=lbl; TL2.TextColor3=Theme.TextTitle; TL2.Font=Enum.Font.Gotham; TL2.TextSize=13; TL2.TextXAlignment=Enum.TextXAlignment.Left
+                local st=def or false
+                TB2.MouseButton1Click:Connect(function() st=not st; Box.BackgroundColor3=st and Theme.Accent or Theme.TopbarBg; cb(st) end)
+                if st then pcall(cb,st) end
+            end
+            function SO:AddSlider(lbl,mn,mx,dv,cb)
+                local SF=Instance.new("Frame",TC); SF.Size=UDim2.new(1,0,0,36); SF.BackgroundTransparency=1
+                local SLb=Instance.new("TextLabel",SF); SLb.Size=UDim2.new(1,-40,0,14); SLb.BackgroundTransparency=1
+                SLb.Text=lbl; SLb.TextColor3=Theme.TextTitle; SLb.Font=Enum.Font.Gotham; SLb.TextSize=12; SLb.TextXAlignment=Enum.TextXAlignment.Left
+                local VLb=Instance.new("TextLabel",SF); VLb.Size=UDim2.new(0,36,0,14); VLb.Position=UDim2.new(1,-36,0,0)
+                VLb.BackgroundTransparency=1; VLb.Text=tostring(dv); VLb.TextColor3=Theme.TextTitle; VLb.Font=Enum.Font.Gotham; VLb.TextSize=12; VLb.TextXAlignment=Enum.TextXAlignment.Right
+                local Tr=Instance.new("TextButton",SF); Tr.Size=UDim2.new(1,0,0,6); Tr.Position=UDim2.new(0,0,0,20)
+                Tr.BackgroundColor3=Theme.TopbarBg; Tr.BorderSizePixel=0; Tr.Text=""; Tr.AutoButtonColor=false
+                Instance.new("UICorner",Tr).CornerRadius=UDim.new(1,0)
+                local Fi=Instance.new("Frame",Tr); local ip=math.clamp((dv-mn)/(mx-mn),0,1)
+                Fi.Size=UDim2.new(ip,0,1,0); Fi.BackgroundColor3=Theme.Accent; Fi.BorderSizePixel=0
+                Instance.new("UICorner",Fi).CornerRadius=UDim.new(1,0)
+                local sl=false
+                Tr.MouseButton1Down:Connect(function() sl=true end)
+                UserInputService.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then sl=false end end)
+                UserInputService.InputChanged:Connect(function(i)
+                    if sl and i.UserInputType==Enum.UserInputType.MouseMovement then
+                        local p=math.clamp((i.Position.X-Tr.AbsolutePosition.X)/Tr.AbsoluteSize.X,0,1)
+                        Fi.Size=UDim2.new(p,0,1,0); local v=math.floor(mn+(mx-mn)*p); VLb.Text=tostring(v); cb(v)
+                    end
+                end)
+                pcall(cb,dv)
+            end
+            function SO:AddButton(lbl,cb)
+                local Btn=Instance.new("TextButton",TC); Btn.Size=UDim2.new(1,-8,0,28); Btn.Position=UDim2.new(0,4,0,0)
+                Btn.BackgroundColor3=Theme.TopbarBg; Btn.BorderSizePixel=0; Btn.Text=lbl; Btn.TextColor3=Theme.TextTitle
+                Btn.Font=Enum.Font.Gotham; Btn.TextSize=13; Btn.AutoButtonColor=false
+                Instance.new("UICorner",Btn).CornerRadius=UDim.new(0,4)
+                Btn.MouseButton1Click:Connect(cb)
+                Btn.MouseEnter:Connect(function() Btn.BackgroundColor3=Color3.fromRGB(40,40,55) end)
+                Btn.MouseLeave:Connect(function() Btn.BackgroundColor3=Theme.TopbarBg end)
+            end
+            return SO
+        end
+        return TabObj
+    end
+    return Win
+end
+
+-- ====================================================================
+-- CREATE WINDOW + TABS
+-- ====================================================================
+local Window     = Library:CreateWindow("Luno Arsenal")
+local CombatTab  = Window:AddTab("Combat")
+local VisualsTab = Window:AddTab("Visuals")
+local ModsTab    = Window:AddTab("GunMods")
+local WorldTab   = Window:AddTab("World")
+local PlayerTab  = Window:AddTab("Player")
+local SettingsTab= Window:AddTab("Settings")
+
+-- COMBAT
+local A1 = CombatTab:AddSection("Aimbot")
+A1:AddToggle("Enable Aimbot",    "",false,function(v) Config.Aimbot=v end)
+A1:AddToggle("Hold Right Click", "",true, function(v) Config.HoldToAim=v end)
+A1:AddSlider("Smoothness",        1,20,1, function(v) Config.AimbotSmoothness=v end)
+A1:AddToggle("Wall Check",       "",true, function(v) Config.WallCheck=v end)
+A1:AddSlider("FOV Radius",       10,500,100, function(v) Config.FOV=v end)
+A1:AddToggle("Show FOV Circle",  "",true, function(v) Config.ShowFOV=v end)
+
+local A2 = CombatTab:AddSection("Silent Aim")
+A2:AddToggle("Silent Aim",  "",false, function(v) Config.SilentAim=v end)
+
+local A2b = CombatTab:AddSection("Target Settings")
+A2b:AddToggle("Wall Check (Multi-Ray)", "",true, function(v) Config.WallCheck=v end)
+A2b:AddSlider("Max Distance (studs)", 50, 800, 300, function(v) Config.MaxDist=v end)
+
+
+-- VISUALS
+local V1 = VisualsTab:AddSection("ESP")
+V1:AddToggle("Enable ESP",      "",false, function(v) Config.ESP=v end)
+V1:AddToggle("Box ESP",         "",true,  function(v) Config.BoxESP=v end)
+V1:AddToggle("Name & Distance", "",true,  function(v) Config.NameESP=v end)
+V1:AddToggle("Health Bar",      "",true,  function(v) Config.HealthBar=v end)
+V1:AddToggle("Chams Highlight", "",true,  function(v) Config.Chams=v end)
+V1:AddToggle("Tracers",         "",false, function(v) Config.Tracers=v end)
+V1:AddToggle("Team Check",      "",true,  function(v) Config.TeamCheck=v end)
+
+-- GUN MODS
+local G1 = ModsTab:AddSection("Weapon Mods")
+G1:AddToggle("Infinite Ammo", "",false, function(v) Config.InfiniteAmmo=v end)
+G1:AddToggle("No Recoil",     "",false, function(v) Config.NoRecoil=v end)
+G1:AddToggle("Rapid Fire",    "",false, function(v) Config.RapidFire=v end)
+
+-- WORLD
+local W1 = WorldTab:AddSection("Lighting")
+W1:AddToggle("Fullbright","",false,function(v)
+    Config.Fullbright=v
+    if not v and not Config.NightMode then
+        Lighting.Ambient=OriginalLighting.Ambient; Lighting.OutdoorAmbient=OriginalLighting.OutdoorAmbient; Lighting.Brightness=OriginalLighting.Brightness
+    end
+end)
+W1:AddToggle("Night Mode","",false,function(v)
+    Config.NightMode=v
+    if not v then Lighting.ClockTime=Config.TimeOfDay; Lighting.Ambient=OriginalLighting.Ambient; Lighting.OutdoorAmbient=OriginalLighting.OutdoorAmbient end
+end)
+W1:AddToggle("No Shadows","",false,function(v)
+    Config.NoShadows=v; if not v then Lighting.GlobalShadows=OriginalLighting.GlobalShadows end
+end)
+W1:AddToggle("Remove Fog","",false,function(v)
+    Config.NoFog=v; if not v then Lighting.FogEnd=OriginalLighting.FogEnd end
+end)
+W1:AddToggle("FPS Boost","",false,function(v)
+    Config.FPSBoost=v
+    if v then
+        for _,o in ipairs(workspace:GetDescendants()) do
+            if o:IsA("Decal") or o:IsA("Texture") then pcall(function() o.Transparency=1 end) end
+        end
+    end
+end)
+W1:AddSlider("Time Of Day",0,24,12,function(v)
+    Config.TimeOfDay=v; if not Config.NightMode then Lighting.ClockTime=v end
+end)
+
+local W2 = WorldTab:AddSection("Physics & Camera")
+W2:AddSlider("Gravity",0,196,196,function(v)
+    Config.Gravity=v; workspace.Gravity=v
+end)
+W2:AddSlider("Camera FOV",50,120,70,function(v)
+    Config.CameraFOV=v; if workspace.CurrentCamera then workspace.CurrentCamera.FieldOfView=v end
+end)
+
+-- PLAYER
+local P1 = PlayerTab:AddSection("Movement")
+P1:AddToggle("Enable Speed Boost","",false,function(v)
+    Config.EnableSpeed=v
+    if not v and LocalPlayer.Character then
+        local h=LocalPlayer.Character:FindFirstChildOfClass("Humanoid"); if h then h.WalkSpeed=16 end
+    end
+end)
+P1:AddSlider("WalkSpeed",16,250,16,function(v) Config.WalkSpeed=v end)
+P1:AddToggle("Enable Jump Boost","",false,function(v)
+    Config.EnableJump=v
+    if not v and LocalPlayer.Character then
+        local h=LocalPlayer.Character:FindFirstChildOfClass("Humanoid"); if h then h.JumpPower=50 end
+    end
+end)
+P1:AddSlider("JumpPower",50,350,50,function(v) Config.JumpPower=v end)
+
+local P2 = PlayerTab:AddSection("Abilities")
+P2:AddToggle("Infinite Jump","",false,function(v) Config.InfiniteJump=v end)
+P2:AddToggle("Noclip",       "",false,function(v) Config.Noclip=v end)
+
+-- SETTINGS
+local function UnloadScript()
+    Config.ESP=false; Config.Tracers=false
+    Config.ZeroGravity=false; Config.Fullbright=false; Config.NoShadows=false; Config.NoFog=false
+    workspace.Gravity=196
+    if Lighting and OriginalLighting then
+        Lighting.Ambient=OriginalLighting.Ambient; Lighting.OutdoorAmbient=OriginalLighting.OutdoorAmbient
+        Lighting.Brightness=OriginalLighting.Brightness; Lighting.GlobalShadows=OriginalLighting.GlobalShadows
+        Lighting.FogEnd=OriginalLighting.FogEnd
+    end
+    for _,pl in ipairs(Players:GetPlayers()) do
+        CleanupPlayerESP(pl)
+    end
+    if FOVCircle then pcall(function() FOVCircle:Remove() end) end
+    local g=game:GetService("CoreGui"):FindFirstChild("LunoArsenalFlat"); if g then g:Destroy() end
+end
+
+-- PRESETS
+local PresetSec = SettingsTab:AddSection("Presets")
+PresetSec:AddButton("[ Legit ] Apply", function()
+    -- Subtle, low-risk settings
+    Config.Aimbot=true;          Config.HoldToAim=true
+    Config.AimbotSmoothness=8;   Config.FOV=80
+    Config.WallCheck=true;       Config.ShowFOV=false
+    Config.SilentAim=false;      Config.Triggerbot=false
+    Config.HitboxExtender=false; Config.Spinbot=false
+    Config.ESP=true;             Config.Chams=false
+    Config.BoxESP=true;          Config.NameESP=true
+    Config.HealthBar=true;       Config.Tracers=false
+    Config.EnableSpeed=true;     Config.WalkSpeed=22
+    Config.EnableJump=false;     Config.InfiniteJump=false
+end)
+PresetSec:AddButton("[ Rage ] Apply", function()
+    -- Max power settings
+    Config.Aimbot=true;           Config.HoldToAim=false
+    Config.AimbotSmoothness=1;    Config.FOV=350
+    Config.WallCheck=false;       Config.ShowFOV=true
+    Config.SilentAim=true
+    Config.ESP=true
+    Config.Chams=true;            Config.BoxESP=true
+    Config.NameESP=true;          Config.HealthBar=true
+    Config.Tracers=true;          Config.EnableSpeed=true
+    Config.WalkSpeed=50;          Config.EnableJump=true
+    Config.JumpPower=150;         Config.InfiniteJump=true
+end)
+
+local S1 = SettingsTab:AddSection("Script Controls")
+S1:AddButton("Unload Script", UnloadScript)
+S1:AddButton("Rejoin Server", function()
+    pcall(function() TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer) end)
+end)
+S1:AddButton("Server Hop", function()
+    pcall(function()
+        local req=(syn and syn.request) or http_request or request
+        if req then
+            local res=req({Url="https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100",Method="GET"})
+            local body=game:GetService("HttpService"):JSONDecode(res.Body)
+            if body and body.data then
+                for _,sv in ipairs(body.data) do
+                    if sv.playing<sv.maxPlayers and sv.id~=game.JobId then
+                        TeleportService:TeleportToPlaceInstance(game.PlaceId,sv.id,LocalPlayer); return
+                    end
+                end
+            end
+        end
+        TeleportService:Teleport(game.PlaceId,LocalPlayer)
+    end)
+end)
+
+local S2 = SettingsTab:AddSection("Community")
+S2:AddButton("Copy Discord",function()
+    local fn=setclipboard or (syn and syn.write_clipboard) or toclipboard
+    if fn then fn("https://discord.gg/lunohub") end
+end)
+
+-- ====================================================================
+-- ABILITY LISTENERS
+-- ====================================================================
+UserInputService.JumpRequest:Connect(function()
+    if Config.InfiniteJump and LocalPlayer.Character then
+        local h=LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if h and h.Health>0 then h:ChangeState(Enum.HumanoidStateType.Jumping) end
+    end
+end)
+
+RunService.Stepped:Connect(function()
+    if Config.Noclip and LocalPlayer.Character then
+        for _,p in ipairs(LocalPlayer.Character:GetDescendants()) do
+            if p:IsA("BasePart") then p.CanCollide=false end
+        end
+    end
+end)
+
+-- ====================================================================
+-- MAIN LOOP
+-- ====================================================================
+RunService.RenderStepped:Connect(function()
+    Camera = workspace.CurrentCamera
+
+    if Config.Aimbot then
+        local ok=true
+        if Config.HoldToAim then ok=UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) end
+        if ok then
+            local tp=GetTarget()
+            if tp and Camera then
+                local cCF=Camera.CFrame; local tCF=CFrame.lookAt(cCF.Position,tp.Position)
+                local sm=math.clamp(Config.AimbotSmoothness,1,20)
+                Camera.CFrame=sm<=1 and tCF or cCF:Lerp(tCF,1/sm)
+            end
+        end
+    end
+
+
+    if FOVCircle then
+        FOVCircle.Position=UserInputService:GetMouseLocation(); FOVCircle.Radius=Config.FOV
+        FOVCircle.Visible=Config.ShowFOV and (Config.Aimbot or Config.SilentAim)
+    end
+
+
+
+    if LocalPlayer.Character then
+        local h=LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if h then
+            if Config.EnableSpeed then h.WalkSpeed=Config.WalkSpeed end
+            if Config.EnableJump  then h.UseJumpPower=true; h.JumpPower=Config.JumpPower end
+        end
+    end
+
+
+    workspace.Gravity = Config.Gravity
+
+    if Config.Fullbright then
+        Lighting.Ambient=Color3.fromRGB(255,255,255); Lighting.OutdoorAmbient=Color3.fromRGB(255,255,255); Lighting.Brightness=2
+    elseif Config.NightMode then
+        Lighting.ClockTime=0; Lighting.OutdoorAmbient=Color3.fromRGB(20,20,40); Lighting.Ambient=Color3.fromRGB(15,15,30)
+    end
+
+    if Config.NoShadows then Lighting.GlobalShadows=false end
+    if Config.NoFog     then Lighting.FogEnd=9e9 end
+    if Camera           then Camera.FieldOfView=Config.CameraFOV end
+
+    for _,pl in ipairs(Players:GetPlayers()) do UpdatePlayerESP(pl) end
+end)
+
+Players.PlayerRemoving:Connect(function(pl) CleanupPlayerESP(pl) end)
