@@ -215,37 +215,43 @@ local function GetTarget()
     return ct, cp
 end
 
--- Silent Aim Hook
+-- Silent Aim Hook (Fires ON MOUSE CLICK ONLY — Zero Camera Detachment)
 pcall(function()
     if not (getrawmetatable and setreadonly) then return end
     local grm = getrawmetatable(game); if not grm then return end
-    local oNC = grm.__namecall; local oIdx = grm.__index
+    local oNC = grm.__namecall
     local cc = checkcaller or function() return false end
+    local callingTarget = false
+
     setreadonly(grm, false)
     grm.__namecall = newcclosure(function(self, ...)
         local m = getnamecallmethod and getnamecallmethod() or ""
-        if Config.SilentAim and not cc() then
-            if m=="FindPartOnWithIgnoreList" or m=="Raycast" or m=="raycast" then
-                local t = GetTarget()
-                if t then
-                    local a = {...}
-                    if a[1] and a[1].Origin then
-                        local o = a[1].Origin; a[1]=Ray.new(o,(t.Position-o).Unit*1000)
-                        return oNC(self,unpack(a))
+        if Config.SilentAim and not cc() and not callingTarget then
+            local isFiring = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+            if isFiring then
+                local sc = getcallingscript and getcallingscript()
+                local scName = sc and sc.Name:lower() or ""
+                if not scName:find("camera") and not scName:find("pop") and not scName:find("control") then
+                    if m=="FindPartOnWithIgnoreList" or m=="Raycast" or m=="raycast" then
+                        callingTarget = true
+                        local t = GetTarget()
+                        callingTarget = false
+                        if t then
+                            local a = {...}
+                            if (m == "Raycast" or m == "raycast") and a[1] and typeof(a[1]) == "Vector3" then
+                                a[2] = (t.Position - a[1]).Unit * 1000
+                                return oNC(self, unpack(a))
+                            elseif a[1] and typeof(a[1]) == "Ray" then
+                                local o = a[1].Origin
+                                a[1] = Ray.new(o, (t.Position - o).Unit * 1000)
+                                return oNC(self, unpack(a))
+                            end
+                        end
                     end
                 end
             end
         end
-        return oNC(self,...)
-    end)
-    grm.__index = newcclosure(function(self, key)
-        if Config.SilentAim and not cc() then
-            if self == LocalPlayer:GetMouse() then
-                if key=="Hit" or key=="hit" then local t=GetTarget(); if t then return t.CFrame end
-                elseif key=="Target" or key=="target" then local t=GetTarget(); if t then return t end end
-            end
-        end
-        return oIdx(self, key)
+        return oNC(self, ...)
     end)
     setreadonly(grm, true)
 end)
@@ -331,7 +337,7 @@ function Library:CreateWindow(title)
     CA.Position=UDim2.new(0,0,0,60); CA.BackgroundTransparency=1
 
     local DL = Instance.new("TextLabel",CA); DL.Size=UDim2.new(0,150,0,20); DL.Position=UDim2.new(0,8,1,-20)
-    DL.BackgroundTransparency=1; DL.Text="discord.gg/lunohub"; DL.TextColor3=Theme.TextSub
+    DL.BackgroundTransparency=1; DL.Text="discord.gg/getluno"; DL.TextColor3=Theme.TextSub
     DL.Font=Enum.Font.Gotham; DL.TextSize=10; DL.TextXAlignment=Enum.TextXAlignment.Left
 
     -- Drag
@@ -641,7 +647,7 @@ end)
 local S2 = SettingsTab:AddSection("Community")
 S2:AddButton("Copy Discord",function()
     local fn=setclipboard or (syn and syn.write_clipboard) or toclipboard
-    if fn then fn("https://discord.gg/lunohub") end
+    if fn then fn("https://discord.gg/getluno") end
 end)
 
 -- ====================================================================
