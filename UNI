@@ -382,7 +382,7 @@ function Library:CreateWindow(title)
     CA.Position=UDim2.new(0,0,0,60); CA.BackgroundTransparency=1
 
     local DL = Instance.new("TextLabel",CA); DL.Size=UDim2.new(0,150,0,20); DL.Position=UDim2.new(0,8,1,-20)
-    DL.BackgroundTransparency=1; DL.Text="discord.gg/lunohub"; DL.TextColor3=Theme.TextSub
+    DL.BackgroundTransparency=1; DL.Text="discord.gg/getluno"; DL.TextColor3=Theme.TextSub
     DL.Font=Enum.Font.Gotham; DL.TextSize=10; DL.TextXAlignment=Enum.TextXAlignment.Left
 
     local drag,ds,sp=false,nil,nil
