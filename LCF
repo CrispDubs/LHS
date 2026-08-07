@@ -214,7 +214,22 @@ local function isValidCoin(part)
     return false
 end
 
+local cachedCoins = {}
+local lastCoinScan = 0
+
 local function getAllCoinsOnMap()
+    if tick() - lastCoinScan < 1 then
+        local validCoins = {}
+        for _, coin in ipairs(cachedCoins) do
+            if coin and coin.Parent and coin.Transparency < 0.95 and not (coinBlacklist[coin] and tick() < coinBlacklist[coin]) then
+                table.insert(validCoins, coin)
+            end
+        end
+        cachedCoins = validCoins
+        return cachedCoins
+    end
+    
+    lastCoinScan = tick()
     local coinList = {}
     local seen = {}
 
@@ -239,7 +254,8 @@ local function getAllCoinsOnMap()
             end
         end
     end
-
+    
+    cachedCoins = coinList
     return coinList
 end
 
@@ -535,7 +551,7 @@ function Library:CreateWindow(title)
     CA.Position=UDim2.new(0,0,0,60); CA.BackgroundTransparency=1
 
     local DL = Instance.new("TextLabel",CA); DL.Size=UDim2.new(0,150,0,20); DL.Position=UDim2.new(0,8,1,-20)
-    DL.BackgroundTransparency=1; DL.Text="discord.gg/lunohub"; DL.TextColor3=Theme.TextSub
+    DL.BackgroundTransparency=1; DL.Text="discord.gg/getluno"; DL.TextColor3=Theme.TextSub
     DL.Font=Enum.Font.Gotham; DL.TextSize=10; DL.TextXAlignment=Enum.TextXAlignment.Left
 
     local drag,ds,sp=false,nil,nil
