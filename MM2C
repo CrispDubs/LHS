@@ -642,20 +642,26 @@ RunService.RenderStepped:Connect(function()
         LocalPlayer.Character.Humanoid.JumpPower = Config.JumpPower
     end
 
-    -- Hitbox Expander
+    -- Hitbox Expander (Applied cleanly without constant reallocation)
     if Config.HitboxExpander then
-        for _, player in pairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                player.Character.HumanoidRootPart.Size = Vector3.new(Config.HitboxSize, Config.HitboxSize, Config.HitboxSize)
-                player.Character.HumanoidRootPart.Transparency = 0.5
-                player.Character.HumanoidRootPart.CanCollide = false
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                local root = player.Character:FindFirstChild("HumanoidRootPart") or player.Character:FindFirstChild("UpperTorso") or player.Character:FindFirstChild("Torso")
+                if root and root:IsA("BasePart") then
+                    root.Size = Vector3.new(Config.HitboxSize, Config.HitboxSize, Config.HitboxSize)
+                    root.Transparency = 0.6
+                    root.CanCollide = false
+                end
             end
         end
     else
-        for _, player in pairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                player.Character.HumanoidRootPart.Size = Vector3.new(2, 2, 1)
-                player.Character.HumanoidRootPart.Transparency = 1
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                local root = player.Character:FindFirstChild("HumanoidRootPart")
+                if root and root.Size.X > 2 then
+                    root.Size = Vector3.new(2, 2, 1)
+                    root.Transparency = 1
+                end
             end
         end
     end
@@ -674,69 +680,62 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- ESP
+    -- Optimized Role ESP (Reuses single Highlight per character without re-querying descendants)
     if Config.ESP then
-        for _, player in pairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                local esp = player.Character:FindFirstChild("ESP_Luno")
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
                 local role = getRole(player)
-                local color = Color3.fromRGB(0, 255, 0)
+                local color = Color3.fromRGB(0, 255, 100)
                 if role == "Murderer" then
-                    color = Color3.fromRGB(255, 0, 0)
+                    color = Color3.fromRGB(255, 40, 40)
                 elseif role == "Sheriff" then
-                    color = Color3.fromRGB(0, 0, 255)
+                    color = Color3.fromRGB(0, 150, 255)
                 end
 
+                local esp = player.Character:FindFirstChild("ESP_Luno")
                 if not esp then
                     esp = Instance.new("Highlight")
                     esp.Name = "ESP_Luno"
+                    esp.FillTransparency = 0.5
+                    esp.OutlineTransparency = 0
                     esp.Parent = player.Character
                 end
                 esp.FillColor = color
-                esp.OutlineColor = color
+                esp.OutlineColor = Color3.fromRGB(255, 255, 255)
+                esp.Enabled = true
             end
         end
     end
+end)
 
-    -- Gun ESP
-    if Config.GunESP then
-        for _, drop in pairs(workspace:GetDescendants()) do
-            if drop.Name == "GunDrop" then
-                if not drop:FindFirstChild("ESP_Luno_Gun") then
-                    local esp = Instance.new("Highlight")
-                    esp.Name = "ESP_Luno_Gun"
-                    esp.FillColor = Color3.fromRGB(255, 255, 0)
-                    esp.OutlineColor = Color3.fromRGB(255, 255, 0)
-                    esp.Parent = drop
+-- Optimized Gun & Coin ESP Scanners (Runs on background thread instead of every frame to eliminate lag)
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+        if Config.GunESP then
+            for _, drop in ipairs(workspace:GetDescendants()) do
+                if drop.Name == "GunDrop" then
+                    if not drop:FindFirstChild("ESP_Luno_Gun") then
+                        local esp = Instance.new("Highlight")
+                        esp.Name = "ESP_Luno_Gun"
+                        esp.FillColor = Color3.fromRGB(255, 215, 0)
+                        esp.OutlineColor = Color3.fromRGB(255, 255, 255)
+                        esp.FillTransparency = 0.2
+                        esp.Parent = drop
+                    end
                 end
             end
         end
-    end
 
-    -- Coin ESP (Universal Gold Highlight Scanner)
-    if Config.CoinESP then
-        local coinContainers = {
-            workspace:FindFirstChild("Normal"),
-            workspace:FindFirstChild("Map"),
-            workspace:FindFirstChild("CoinContainer"),
-        }
-        -- Fallback to workspace if specific containers aren't present
-        local validContainers = {}
-        for _, c in ipairs(coinContainers) do
-            if c then table.insert(validContainers, c) end
-        end
-        if #validContainers == 0 then table.insert(validContainers, workspace) end
-
-        for _, container in ipairs(validContainers) do
-            for _, desc in pairs(container:GetDescendants()) do
+        if Config.CoinESP then
+            for _, desc in ipairs(workspace:GetDescendants()) do
                 if isValidCoin(desc) then
                     if not desc:FindFirstChild("ESP_Luno_Coin") then
                         local esp = Instance.new("Highlight")
                         esp.Name = "ESP_Luno_Coin"
-                        esp.FillColor = Color3.fromRGB(255, 215, 0) -- Vibrant Gold
+                        esp.FillColor = Color3.fromRGB(255, 215, 0)
                         esp.OutlineColor = Color3.fromRGB(255, 255, 255)
-                        esp.FillTransparency = 0.25
-                        esp.OutlineTransparency = 0
+                        esp.FillTransparency = 0.3
                         esp.Parent = desc
                     end
                 end
