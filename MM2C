@@ -1,458 +1,113 @@
 -- ====================================================================
--- OWL HUB STYLE (Flat, Minimalist) + LUNO COLORS (Black & Purple)
+-- LUNO MM2 COMBAT | Advanced Suite BETA
+-- Complete Ground-Up Rewrite: Optimized ESP Engine, Billboard & Chams,
+-- Kill Aura, Auto Gun Collect, Murderer Radar HUD, and Clean Unload System
 -- ====================================================================
 
-local TweenService = game:GetService("TweenService")
+local TweenService     = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
+local RunService       = game:GetService("RunService")
+local Players          = game:GetService("Players")
+local Lighting         = game:GetService("Lighting")
+local TeleportService  = game:GetService("TeleportService")
+local ReplicatedStorage= game:GetService("ReplicatedStorage")
+
+local LocalPlayer      = Players.LocalPlayer
+local Camera           = workspace.CurrentCamera
 
 local Theme = {
-    MainBg       = Color3.fromRGB(15, 15, 20),
-    TopbarBg     = Color3.fromRGB(25, 25, 30),
-    TabBg        = Color3.fromRGB(20, 20, 25),
-    TabActive    = Color3.fromRGB(35, 35, 45),
-    
-    Accent       = Color3.fromRGB(138, 43, 226), -- Purple
-    
-    TextTitle    = Color3.fromRGB(255, 255, 255),
-    TextSub      = Color3.fromRGB(170, 170, 180),
+    MainBg    = Color3.fromRGB(15, 15, 20),
+    TopbarBg  = Color3.fromRGB(25, 25, 30),
+    TabBg     = Color3.fromRGB(20, 20, 25),
+    TabActive = Color3.fromRGB(35, 35, 45),
+    Accent    = Color3.fromRGB(138, 43, 226),
+    TextTitle = Color3.fromRGB(255, 255, 255),
+    TextSub   = Color3.fromRGB(170, 170, 180),
 }
-
-local function CreateTween(instance, properties, duration)
-    local tweenInfo = TweenInfo.new(duration or 0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-    local tween = TweenService:Create(instance, tweenInfo, properties)
-    tween:Play()
-    return tween
-end
-
-local Library = { Elements = {} }
-
-function Library:CreateWindow(titleText, gameTagText, quoteText)
-    titleText = (titleText or "Luno Rivals") .. " [BETA]"
-
-    local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "LunoRivalsFlat"
-    ScreenGui.ResetOnSpawn = false
-    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-
-    pcall(function()
-        if gethui then
-            ScreenGui.Parent = gethui()
-        elseif syn and syn.protect_gui then
-            syn.protect_gui(ScreenGui)
-            ScreenGui.Parent = game:GetService("CoreGui")
-        else
-            ScreenGui.Parent = game:GetService("CoreGui")
-        end
-    end)
-    if not ScreenGui.Parent then
-        ScreenGui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
-    end
-
-    local MainFrame = Instance.new("Frame")
-    MainFrame.Name = "MainFrame"
-    MainFrame.Size = UDim2.new(0, 450, 0, 300)
-    MainFrame.Position = UDim2.new(0.5, -225, 0.5, -150)
-    MainFrame.BackgroundColor3 = Theme.MainBg
-    MainFrame.BorderSizePixel = 0
-    MainFrame.Parent = ScreenGui
-
-    -- Rounded Corners
-    local MainCorner = Instance.new("UICorner")
-    MainCorner.CornerRadius = UDim.new(0, 8)
-    MainCorner.Parent = MainFrame
-
-    -- Topbar Rounded Top
-    local TopbarCorner = Instance.new("UICorner")
-    TopbarCorner.CornerRadius = UDim.new(0, 8)
-    -- TopbarCorner.Parent = Topbar -- (We will set this when Topbar is created)
-
-    -- Animated Purple Border
-    local MainStroke = Instance.new("UIStroke")
-    MainStroke.Color = Color3.fromRGB(255, 255, 255)
-    MainStroke.Thickness = 2
-    MainStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    MainStroke.Parent = MainFrame
-
-    local StrokeGradient = Instance.new("UIGradient")
-    StrokeGradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Theme.Accent),
-        ColorSequenceKeypoint.new(0.5, Theme.MainBg),
-        ColorSequenceKeypoint.new(1, Theme.Accent)
-    })
-    StrokeGradient.Parent = MainStroke
-
-    -- Spin the gradient for animation
-    RunService.RenderStepped:Connect(function()
-        if StrokeGradient then
-            StrokeGradient.Rotation = (StrokeGradient.Rotation + 2) % 360
-        end
-    end)
-
-    -- Draggable Logic
-    local dragging, dragInput, dragStart, startPos
-    MainFrame.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = MainFrame.Position
-            
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
-        end
-    end)
-    MainFrame.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            dragInput = input
-        end
-    end)
-    UserInputService.InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            local delta = input.Position - dragStart
-            MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-        end
-    end)
-
-    -- Topbar
-    local Topbar = Instance.new("Frame")
-    Topbar.Size = UDim2.new(1, 0, 0, 30)
-    Topbar.BackgroundColor3 = Theme.TopbarBg
-    Topbar.BorderSizePixel = 0
-    Topbar.Parent = MainFrame
-
-    TopbarCorner.Parent = Topbar
-
-    local Title = Instance.new("TextLabel")
-    Title.Size = UDim2.new(1, -60, 1, 0)
-    Title.Position = UDim2.new(0, 10, 0, 0)
-    Title.BackgroundTransparency = 1
-    Title.Text = "🌙 " .. titleText
-    Title.TextColor3 = Theme.TextTitle
-    Title.Font = Enum.Font.GothamBold
-    Title.TextSize = 14
-    Title.TextXAlignment = Enum.TextXAlignment.Left
-    Title.Parent = Topbar
-
-    local CloseBtn = Instance.new("TextButton")
-    CloseBtn.Size = UDim2.new(0, 30, 0, 30)
-    CloseBtn.Position = UDim2.new(1, -30, 0, 0)
-    CloseBtn.BackgroundTransparency = 1
-    CloseBtn.Text = "X"
-    CloseBtn.TextColor3 = Theme.TextTitle
-    CloseBtn.Font = Enum.Font.GothamBold
-    CloseBtn.TextSize = 14
-    CloseBtn.Parent = Topbar
-    CloseBtn.MouseButton1Click:Connect(function()
-        ScreenGui:Destroy()
-    end)
-
-    local MinBtn = Instance.new("TextButton")
-    MinBtn.Size = UDim2.new(0, 30, 0, 30)
-    MinBtn.Position = UDim2.new(1, -60, 0, 0)
-    MinBtn.BackgroundTransparency = 1
-    MinBtn.Text = "-"
-    MinBtn.TextColor3 = Theme.TextTitle
-    MinBtn.Font = Enum.Font.GothamBold
-    MinBtn.TextSize = 14
-    MinBtn.Parent = Topbar
-
-    local ContentArea = Instance.new("Frame")
-    ContentArea.Size = UDim2.new(1, 0, 1, -60)
-    ContentArea.Position = UDim2.new(0, 0, 0, 60)
-    ContentArea.BackgroundTransparency = 1
-    ContentArea.Parent = MainFrame
-
-    local DiscordText = Instance.new("TextLabel")
-    DiscordText.Size = UDim2.new(0, 150, 0, 20)
-    DiscordText.Position = UDim2.new(0, 10, 1, -20)
-    DiscordText.BackgroundTransparency = 1
-    DiscordText.Text = "discord.gg/lunohub"
-    DiscordText.TextColor3 = Theme.TextSub
-    DiscordText.Font = Enum.Font.Gotham
-    DiscordText.TextSize = 10
-    DiscordText.TextXAlignment = Enum.TextXAlignment.Left
-    DiscordText.Parent = ContentArea
-
-    MinBtn.MouseButton1Click:Connect(function()
-        ContentArea.Visible = not ContentArea.Visible
-        if ContentArea.Visible then
-            MainFrame.Size = UDim2.new(0, 450, 0, 300)
-        else
-            MainFrame.Size = UDim2.new(0, 450, 0, 30)
-        end
-    end)
-
-    -- RightShift toggle
-    UserInputService.InputBegan:Connect(function(input, processed)
-        if not processed and input.KeyCode == Enum.KeyCode.RightShift then
-            ScreenGui.Enabled = not ScreenGui.Enabled
-        end
-    end)
-
-    -- Tab Bar
-    local TabBar = Instance.new("Frame")
-    TabBar.Size = UDim2.new(1, 0, 0, 30)
-    TabBar.Position = UDim2.new(0, 0, 0, 30)
-    TabBar.BackgroundColor3 = Theme.TabBg
-    TabBar.BorderSizePixel = 0
-    TabBar.Parent = MainFrame
-    
-    local TabList = Instance.new("UIListLayout")
-    TabList.FillDirection = Enum.FillDirection.Horizontal
-    TabList.SortOrder = Enum.SortOrder.LayoutOrder
-    TabList.Parent = TabBar
-
-    local Window = {
-        CurrentTab = nil,
-        Tabs = {}
-    }
-
-    function Window:AddTab(tabName, icon)
-        local TabBtn = Instance.new("TextButton")
-        TabBtn.Size = UDim2.new(0, 80, 1, 0)
-        TabBtn.BackgroundColor3 = Theme.TabBg
-        TabBtn.BorderSizePixel = 0
-        TabBtn.Text = string.upper(tabName)
-        TabBtn.TextColor3 = Theme.TextTitle
-        TabBtn.Font = Enum.Font.Gotham
-        TabBtn.TextSize = 12
-        TabBtn.Parent = TabBar
-
-        local TabContent = Instance.new("ScrollingFrame")
-        TabContent.Size = UDim2.new(1, -20, 1, -20)
-        TabContent.Position = UDim2.new(0, 10, 0, 10)
-        TabContent.BackgroundTransparency = 1
-        TabContent.ScrollBarThickness = 2
-        TabContent.Visible = false
-        TabContent.Parent = ContentArea
-
-        local ContentList = Instance.new("UIListLayout")
-        ContentList.SortOrder = Enum.SortOrder.LayoutOrder
-        ContentList.Padding = UDim.new(0, 5)
-        ContentList.Parent = TabContent
-
-        ContentList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-            TabContent.CanvasSize = UDim2.new(0, 0, 0, ContentList.AbsoluteContentSize.Y + 10)
-        end)
-
-        TabBtn.MouseButton1Click:Connect(function()
-            for _, t in pairs(Window.Tabs) do
-                t.Btn.BackgroundColor3 = Theme.TabBg
-                t.Content.Visible = false
-            end
-            TabBtn.BackgroundColor3 = Theme.TabActive
-            TabContent.Visible = true
-        end)
-
-        if not Window.CurrentTab then
-            Window.CurrentTab = tabName
-            TabBtn.BackgroundColor3 = Theme.TabActive
-            TabContent.Visible = true
-        end
-
-        table.insert(Window.Tabs, {Btn = TabBtn, Content = TabContent})
-
-        local TabObj = {}
-        function TabObj:AddSubTab(subName, icon)
-            -- Ignore SubTabs, just return self so Sections go into the Main Tab
-            return TabObj
-        end
-
-        function TabObj:AddSection(secName, side)
-            -- Just a spacer with title for Owl Hub style
-            local SecFrame = Instance.new("Frame")
-            SecFrame.Size = UDim2.new(1, 0, 0, 20)
-            SecFrame.BackgroundTransparency = 1
-            SecFrame.Parent = TabContent
-
-            local SecTitle = Instance.new("TextLabel")
-            SecTitle.Size = UDim2.new(1, 0, 1, 0)
-            SecTitle.BackgroundTransparency = 1
-            SecTitle.Text = secName
-            SecTitle.TextColor3 = Theme.TextSub
-            SecTitle.Font = Enum.Font.Gotham
-            SecTitle.TextSize = 11
-            SecTitle.TextXAlignment = Enum.TextXAlignment.Left
-            SecTitle.Parent = SecFrame
-
-            local SectionObj = {}
-            
-            function SectionObj:AddToggle(title, subtitle, defaultValue, callback)
-                local TglFrame = Instance.new("TextButton")
-                TglFrame.Size = UDim2.new(1, 0, 0, 30)
-                TglFrame.BackgroundTransparency = 1
-                TglFrame.Text = ""
-                TglFrame.Parent = TabContent
-
-                local Box = Instance.new("Frame")
-                Box.Size = UDim2.new(0, 16, 0, 16)
-                Box.Position = UDim2.new(0, 0, 0.5, -8)
-                Box.BackgroundColor3 = defaultValue and Theme.Accent or Theme.TopbarBg
-                Box.BorderSizePixel = 0
-                Box.Parent = TglFrame
-
-                local TglText = Instance.new("TextLabel")
-                TglText.Size = UDim2.new(1, -25, 1, 0)
-                TglText.Position = UDim2.new(0, 25, 0, 0)
-                TglText.BackgroundTransparency = 1
-                TglText.Text = title
-                TglText.TextColor3 = Theme.TextTitle
-                TglText.Font = Enum.Font.Gotham
-                TglText.TextSize = 13
-                TglText.TextXAlignment = Enum.TextXAlignment.Left
-                TglText.Parent = TglFrame
-
-                local toggled = defaultValue
-                TglFrame.MouseButton1Click:Connect(function()
-                    toggled = not toggled
-                    Box.BackgroundColor3 = toggled and Theme.Accent or Theme.TopbarBg
-                    callback(toggled)
-                end)
-                if defaultValue then callback(defaultValue) end
-            end
-
-            function SectionObj:AddSlider(sliderText, minVal, maxVal, defaultVal, callback)
-                local SldFrame = Instance.new("Frame")
-                SldFrame.Size = UDim2.new(1, 0, 0, 35)
-                SldFrame.BackgroundTransparency = 1
-                SldFrame.Parent = TabContent
-
-                local Title = Instance.new("TextLabel")
-                Title.Size = UDim2.new(1, -40, 0, 15)
-                Title.Position = UDim2.new(0, 0, 0, 0)
-                Title.BackgroundTransparency = 1
-                Title.Text = sliderText
-                Title.TextColor3 = Theme.TextTitle
-                Title.Font = Enum.Font.Gotham
-                Title.TextSize = 13
-                Title.TextXAlignment = Enum.TextXAlignment.Left
-                Title.Parent = SldFrame
-
-                local ValText = Instance.new("TextLabel")
-                ValText.Size = UDim2.new(0, 40, 0, 15)
-                ValText.Position = UDim2.new(1, -40, 0, 0)
-                ValText.BackgroundTransparency = 1
-                ValText.Text = tostring(defaultVal)
-                ValText.TextColor3 = Theme.TextTitle
-                ValText.Font = Enum.Font.Gotham
-                ValText.TextSize = 13
-                ValText.TextXAlignment = Enum.TextXAlignment.Right
-                ValText.Parent = SldFrame
-
-                local Track = Instance.new("TextButton")
-                Track.Size = UDim2.new(1, 0, 0, 4)
-                Track.Position = UDim2.new(0, 0, 0, 20)
-                Track.BackgroundColor3 = Theme.TopbarBg
-                Track.BorderSizePixel = 0
-                Track.Text = ""
-                Track.AutoButtonColor = false
-                Track.Parent = SldFrame
-
-                local Fill = Instance.new("Frame")
-                local pct = math.clamp((defaultVal - minVal) / (maxVal - minVal), 0, 1)
-                Fill.Size = UDim2.new(pct, 0, 1, 0)
-                Fill.BackgroundColor3 = Theme.Accent
-                Fill.BorderSizePixel = 0
-                Fill.Parent = Track
-
-                local dragging = false
-                Track.MouseButton1Down:Connect(function() dragging = true end)
-                UserInputService.InputEnded:Connect(function(input)
-                    if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
-                end)
-                UserInputService.InputChanged:Connect(function(input)
-                    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-                        local size = math.clamp((input.Position.X - Track.AbsolutePosition.X) / Track.AbsoluteSize.X, 0, 1)
-                        Fill.Size = UDim2.new(size, 0, 1, 0)
-                        local val = math.floor(minVal + (maxVal - minVal) * size)
-                        ValText.Text = tostring(val)
-                        callback(val)
-                    end
-                end)
-                callback(defaultVal)
-            end
-
-            function SectionObj:AddButton(title, callback)
-                local BtnFrame = Instance.new("TextButton")
-                BtnFrame.Size = UDim2.new(1, -10, 0, 30)
-                BtnFrame.Position = UDim2.new(0, 5, 0, 0)
-                BtnFrame.BackgroundColor3 = Theme.TopbarBg
-                BtnFrame.BorderSizePixel = 0
-                BtnFrame.Text = title
-                BtnFrame.TextColor3 = Theme.TextTitle
-                BtnFrame.Font = Enum.Font.Gotham
-                BtnFrame.TextSize = 13
-                BtnFrame.Parent = TabContent
-                
-                BtnFrame.MouseButton1Click:Connect(callback)
-            end
-
-            return SectionObj
-        end
-        return TabObj
-    end
-    return Window
-end
-
-
-local Window = Library:CreateWindow("Luno MM2 Combat", "MM2", "Dominate the game.")
 
 local Config = {
-    KillAura = false,
-    AuraRange = 15,
+    -- Combat Settings
+    KillAura          = false,
+    AuraRange         = 15,
     KillAllAsMurderer = false,
-    FlingMurderer = false,
-    AutoCollectGun = false,
-    ESP = false,
-    Tracers = false,
-    WalkSpeed = 16,
-    JumpPower = 50,
-    NoClip = false,
-    XRay = false,
-    HitboxExpander = false,
-    HitboxSize = 10,
-    GunESP = false,
-    CoinESP = false
+    MurdererRadar     = false,
+
+    -- Visuals Settings
+    RoleESP           = true,
+    BoxESP            = true,
+    NameESP           = true,
+    Tracers           = false,
+    GunESP            = false,
+    CoinESP           = false,
+
+    -- Player Mods
+    WalkSpeed         = 16,
+    JumpPower         = 50,
+    InfiniteJump      = false,
+    NoClip            = false,
+    XRay              = false,
 }
 
--- Helpers
-local function getRole(player)
-    if player.Character then
-        if player.Character:FindFirstChild("Knife") or player.Backpack:FindFirstChild("Knife") then
-            return "Murderer"
-        elseif player.Character:FindFirstChild("Gun") or player.Backpack:FindFirstChild("Gun") then
-            return "Sheriff"
-        end
+local OriginalTransparencies = {}
+local scriptRunning          = true
+local renderConn             = nil
+local steppedConn            = nil
+local jumpConn               = nil
+local gunConn                = nil
+local Tracers                = {}
+
+-- ====================================================================
+-- MM2 UTILITIES & ROLE DETECTION
+-- ====================================================================
+local function GetPlayerRole(player)
+    if not player or not player.Character then return "Innocent" end
+    
+    -- Check Character tools
+    if player.Character:FindFirstChild("Knife") then return "Murderer" end
+    if player.Character:FindFirstChild("Gun") then return "Sheriff" end
+
+    -- Check Backpack tools
+    local bp = player:FindFirstChild("Backpack")
+    if bp then
+        if bp:FindFirstChild("Knife") then return "Murderer" end
+        if bp:FindFirstChild("Gun") then return "Sheriff" end
     end
+
     return "Innocent"
 end
 
-local function getMurderer()
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and getRole(player) == "Murderer" then
+local function GetRoleColor(role)
+    if role == "Murderer" then
+        return Color3.fromRGB(255, 40, 40)
+    elseif role == "Sheriff" then
+        return Color3.fromRGB(0, 150, 255)
+    else
+        return Color3.fromRGB(0, 255, 120)
+    end
+end
+
+local function GetMurderer()
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and GetPlayerRole(player) == "Murderer" then
             return player
         end
     end
     return nil
 end
 
-local function getClosestPlayer(range)
+local function GetClosestTarget(maxDist)
     local closest = nil
-    local maxDist = range or math.huge
-
+    local shortest = maxDist or math.huge
     if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        local rootPos = LocalPlayer.Character.HumanoidRootPart.Position
-        for _, player in pairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChild("Humanoid").Health > 0 then
-                local dist = (player.Character.HumanoidRootPart.Position - rootPos).Magnitude
-                if dist < maxDist then
-                    closest = player
-                    maxDist = dist
+        local myPos = LocalPlayer.Character.HumanoidRootPart.Position
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChildOfClass("Humanoid") then
+                if player.Character:FindFirstChildOfClass("Humanoid").Health > 0 then
+                    local dist = (player.Character.HumanoidRootPart.Position - myPos).Magnitude
+                    if dist < shortest then
+                        shortest = dist
+                        closest = player
+                    end
                 end
             end
         end
@@ -460,146 +115,360 @@ local function getClosestPlayer(range)
     return closest
 end
 
-local function isValidCoin(part)
+local function IsValidCoinPart(part)
     if not part or not part:IsA("BasePart") then return false end
     if part.Transparency >= 0.9 then return false end
-    if part:FindFirstAncestor("Lobby") or part:FindFirstAncestor("Shop") or part:FindFirstAncestor("PlayerGui") or part:FindFirstAncestor("CoreGui") then
-        return false
-    end
+    if part:FindFirstAncestor("Lobby") or part:FindFirstAncestor("Shop") or part:FindFirstAncestor("PlayerGui") then return false end
     local name = part.Name:lower()
     local pName = part.Parent and part.Parent.Name:lower() or ""
-    if name == "maincoin" or name == "coin" or name:find("coin") or name:find("token") or name:find("beachball") or pName == "coincontainer" or pName == "coinserver" or pName:find("coin") then
+    if name == "maincoin" or name == "coin" or name:find("coin") or name:find("token") or pName == "coincontainer" or pName:find("coin") then
         return true
     end
     return false
 end
 
--- ====================
--- Combat Tab
--- ====================
-local CombatTab = Window:AddTab("Combat", "⚔️")
-local MainSubTab = CombatTab:AddSubTab("Main", "")
-local CombatSection = MainSubTab:AddSection("Combat Settings", "Left")
-
-CombatSection:AddToggle("Kill Aura", "Automatically slashes nearby players", false, function(Value)
-    Config.KillAura = Value
-end)
-
-CombatSection:AddSlider("Aura Range", 5, 30, 15, function(Value)
-    Config.AuraRange = Value
-end)
-
-CombatSection:AddToggle("Kill All As Murderer", "Teleports to and kills everyone", false, function(Value)
-    Config.KillAllAsMurderer = Value
-end)
-
-CombatSection:AddToggle("Fling Murderer", "Spin rapidly and launch them", false, function(Value)
-    Config.FlingMurderer = Value
-end)
-
-CombatSection:AddToggle("Auto Collect Gun", "Instantly TP to dropped gun", false, function(Value)
-    Config.AutoCollectGun = Value
-end)
-
-CombatSection:AddButton("Teleport To Murderer", function()
-    local murderer = getMurderer()
-    if murderer and murderer.Character and murderer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        LocalPlayer.Character.HumanoidRootPart.CFrame = murderer.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 3)
+-- ====================================================================
+-- ESP ENGINE (BillboardGui Parented Directly To RootPart)
+-- ====================================================================
+local function RemovePlayerESP(player)
+    if player and player.Character then
+        local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            local oldGui = hrp:FindFirstChild("Luno_MM2_ESP_Gui")
+            if oldGui then oldGui:Destroy() end
+        end
+        local oldHighlight = player.Character:FindFirstChild("Luno_MM2_Chams")
+        if oldHighlight then oldHighlight:Destroy() end
     end
-end)
+end
 
-CombatSection:AddButton("Teleport To Sheriff", function()
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and getRole(player) == "Sheriff" and player.Character and player.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            LocalPlayer.Character.HumanoidRootPart.CFrame = player.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 3)
-            break
+local function UpdatePlayerESP(player)
+    if not Config.RoleESP or player == LocalPlayer or not player.Character then
+        RemovePlayerESP(player)
+        return
+    end
+
+    local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+    local hum = player.Character:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum or hum.Health <= 0 then
+        RemovePlayerESP(player)
+        return
+    end
+
+    local role = GetPlayerRole(player)
+    local roleColor = GetRoleColor(role)
+
+    -- BillboardGui
+    local bgui = hrp:FindFirstChild("Luno_MM2_ESP_Gui")
+    if not bgui then
+        bgui = Instance.new("BillboardGui")
+        bgui.Name = "Luno_MM2_ESP_Gui"
+        bgui.AlwaysOnTop = true
+        bgui.Size = UDim2.new(0, 160, 0, 50)
+        bgui.StudsOffset = Vector3.new(0, 3, 0)
+        bgui.Parent = hrp
+
+        local titleLabel = Instance.new("TextLabel")
+        titleLabel.Name = "TitleLabel"
+        titleLabel.Size = UDim2.new(1, 0, 0, 20)
+        titleLabel.BackgroundTransparency = 1
+        titleLabel.Font = Enum.Font.GothamBold
+        titleLabel.TextSize = 13
+        titleLabel.TextStrokeTransparency = 0.4
+        titleLabel.Parent = bgui
+
+        local subLabel = Instance.new("TextLabel")
+        subLabel.Name = "SubLabel"
+        subLabel.Size = UDim2.new(1, 0, 0, 16)
+        subLabel.Position = UDim2.new(0, 0, 0, 20)
+        subLabel.BackgroundTransparency = 1
+        subLabel.Font = Enum.Font.GothamSemibold
+        subLabel.TextSize = 11
+        subLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+        subLabel.TextStrokeTransparency = 0.5
+        subLabel.Parent = bgui
+    end
+
+    local dist = 0
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        dist = math.floor((hrp.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude)
+    end
+
+    local titleLabel = bgui:FindFirstChild("TitleLabel")
+    local subLabel   = bgui:FindFirstChild("SubLabel")
+    if titleLabel and subLabel then
+        if Config.NameESP then
+            titleLabel.Text = string.format("[%s] %s", role:upper(), player.Name)
+            titleLabel.TextColor3 = roleColor
+            subLabel.Text = string.format("%d studs", dist)
+        else
+            titleLabel.Text = ""
+            subLabel.Text = ""
         end
     end
-end)
 
-CombatSection:AddToggle("Hitbox Expander", "Make everyone giant", false, function(Value)
-    Config.HitboxExpander = Value
-end)
+    -- Chams Highlight
+    local chams = player.Character:FindFirstChild("Luno_MM2_Chams")
+    if Config.BoxESP then
+        if not chams then
+            chams = Instance.new("Highlight")
+            chams.Name = "Luno_MM2_Chams"
+            chams.Parent = player.Character
+        end
+        chams.FillColor = roleColor
+        chams.OutlineColor = Color3.fromRGB(255, 255, 255)
+        chams.FillTransparency = 0.5
+        chams.OutlineTransparency = 0
+        chams.Enabled = true
+    elseif chams then
+        chams.Enabled = false
+    end
+end
 
-CombatSection:AddSlider("Hitbox Size", 5, 50, 10, function(Value)
-    Config.HitboxSize = Value
-end)
+-- ====================================================================
+-- UI LIBRARY SYSTEM (Standard Luno UI)
+-- ====================================================================
+local Library = {}
+function Library:CreateWindow(title)
+    title = (title or "Luno MM2 Combat") .. " [BETA]"
+    local SG = Instance.new("ScreenGui"); SG.Name="LunoMM2CombatFlat"; SG.ResetOnSpawn=false
+    SG.ZIndexBehavior=Enum.ZIndexBehavior.Sibling
+    pcall(function()
+        if gethui then SG.Parent=gethui()
+        elseif syn and syn.protect_gui then syn.protect_gui(SG); SG.Parent=game:GetService("CoreGui")
+        else SG.Parent=game:GetService("CoreGui") end
+    end)
+    if not SG.Parent then SG.Parent=LocalPlayer:WaitForChild("PlayerGui") end
 
--- ====================
--- Visuals Tab
--- ====================
-local VisualsTab = Window:AddTab("Visuals", "👁️")
-local VisSubTab = VisualsTab:AddSubTab("Main", "")
-local VisualsSection = VisSubTab:AddSection("Visual Settings", "Left")
+    local GlowFrame = Instance.new("Frame"); GlowFrame.Name="GlowFrame"
+    GlowFrame.Size=UDim2.new(0,456,0,306); GlowFrame.Position=UDim2.new(0.5,-228,0.5,-153)
+    GlowFrame.BackgroundColor3=Theme.Accent; GlowFrame.BorderSizePixel=0; GlowFrame.ZIndex=0
+    GlowFrame.Parent=SG
+    Instance.new("UICorner",GlowFrame).CornerRadius=UDim.new(0,10)
 
-VisualsSection:AddToggle("Role ESP", "See everyone's roles", false, function(Value)
-    Config.ESP = Value
-    if not Value then
-        for _, player in pairs(Players:GetPlayers()) do
-            if player.Character and player.Character:FindFirstChild("ESP_Luno") then
-                player.Character.ESP_Luno:Destroy()
+    local MF = Instance.new("Frame"); MF.Name="MainFrame"; MF.Size=UDim2.new(0,450,0,300)
+    MF.Position=UDim2.new(0.5,-225,0.5,-150); MF.BackgroundColor3=Theme.MainBg
+    MF.BorderSizePixel=0; MF.ZIndex=1; MF.Parent=SG
+    Instance.new("UICorner",MF).CornerRadius=UDim.new(0,8)
+
+    local MS = Instance.new("UIStroke",MF)
+    MS.Color     = Color3.fromRGB(255,255,255)
+    MS.Thickness = 2
+    MS.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    local StrokeGradient = Instance.new("UIGradient",MS)
+    StrokeGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0,   Theme.Accent),
+        ColorSequenceKeypoint.new(0.5, Theme.MainBg),
+        ColorSequenceKeypoint.new(1,   Theme.Accent),
+    })
+    RunService.RenderStepped:Connect(function()
+        if StrokeGradient and StrokeGradient.Parent then
+            StrokeGradient.Rotation = (StrokeGradient.Rotation + 2) % 360
+        end
+    end)
+    local function SyncGlow()
+        local p = MF.Position
+        GlowFrame.Position = UDim2.new(p.X.Scale, p.X.Offset-3, p.Y.Scale, p.Y.Offset-3)
+    end
+    MF:GetPropertyChangedSignal("Position"):Connect(SyncGlow)
+
+    local TB = Instance.new("Frame",MF); TB.Size=UDim2.new(1,0,0,30); TB.BackgroundColor3=Theme.TopbarBg; TB.BorderSizePixel=0
+    Instance.new("UICorner",TB).CornerRadius=UDim.new(0,8)
+    local TL = Instance.new("TextLabel",TB); TL.Size=UDim2.new(1,-70,1,0); TL.Position=UDim2.new(0,10,0,0)
+    TL.BackgroundTransparency=1; TL.Text="🌙 "..title; TL.TextColor3=Theme.TextTitle
+    TL.Font=Enum.Font.GothamBold; TL.TextSize=13; TL.TextXAlignment=Enum.TextXAlignment.Left
+    local MinB = Instance.new("TextButton",TB); MinB.Size=UDim2.new(0,30,0,30); MinB.Position=UDim2.new(1,-60,0,0)
+    MinB.BackgroundTransparency=1; MinB.Text="-"; MinB.TextColor3=Theme.TextTitle; MinB.Font=Enum.Font.GothamBold; MinB.TextSize=16
+    local ClsB = Instance.new("TextButton",TB); ClsB.Size=UDim2.new(0,30,0,30); ClsB.Position=UDim2.new(1,-30,0,0)
+    ClsB.BackgroundTransparency=1; ClsB.Text="X"; ClsB.TextColor3=Theme.TextTitle; ClsB.Font=Enum.Font.GothamBold; ClsB.TextSize=13
+    ClsB.MouseButton1Click:Connect(function() SG:Destroy() end)
+
+    local TabBar = Instance.new("Frame",MF); TabBar.Name="TabBar"; TabBar.Size=UDim2.new(1,0,0,30)
+    TabBar.Position=UDim2.new(0,0,0,30); TabBar.BackgroundColor3=Theme.TabBg; TabBar.BorderSizePixel=0
+    local TBL = Instance.new("UIListLayout",TabBar); TBL.FillDirection=Enum.FillDirection.Horizontal; TBL.SortOrder=Enum.SortOrder.LayoutOrder
+
+    local CA = Instance.new("Frame",MF); CA.Name="ContentArea"; CA.Size=UDim2.new(1,0,1,-60)
+    CA.Position=UDim2.new(0,0,0,60); CA.BackgroundTransparency=1
+
+    local DL = Instance.new("TextLabel",CA); DL.Size=UDim2.new(0,150,0,20); DL.Position=UDim2.new(0,8,1,-20)
+    DL.BackgroundTransparency=1; DL.Text="discord.gg/lunohub"; DL.TextColor3=Theme.TextSub
+    DL.Font=Enum.Font.Gotham; DL.TextSize=10; DL.TextXAlignment=Enum.TextXAlignment.Left
+
+    local drag,ds,sp=false,nil,nil
+    TB.InputBegan:Connect(function(i)
+        if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
+            drag=true; ds=i.Position; sp=MF.Position
+            i.Changed:Connect(function() if i.UserInputState==Enum.UserInputState.End then drag=false end end)
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(i)
+        if drag and (i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch) then
+            local delta=i.Position-ds
+            MF.Position=UDim2.new(sp.X.Scale,sp.X.Offset+delta.X,sp.Y.Scale,sp.Y.Offset+delta.Y)
+        end
+    end)
+
+    local mini=false
+    MinB.MouseButton1Click:Connect(function()
+        mini=not mini; TabBar.Visible=not mini; CA.Visible=not mini
+        GlowFrame.Visible=not mini
+        MF.Size=mini and UDim2.new(0,450,0,30) or UDim2.new(0,450,0,300)
+    end)
+
+    UserInputService.InputBegan:Connect(function(i,gp)
+        if not gp and i.KeyCode==Enum.KeyCode.RightShift then SG.Enabled=not SG.Enabled end
+    end)
+
+    local Win={Tabs={},CurrentTab=nil,ScreenGui=SG}
+    function Win:AddTab(name)
+        local TBtn=Instance.new("TextButton",TabBar); TBtn.Size=UDim2.new(0,80,1,0)
+        TBtn.BackgroundColor3=Theme.TabBg; TBtn.BorderSizePixel=0; TBtn.Text=string.upper(name)
+        TBtn.TextColor3=Theme.TextTitle; TBtn.Font=Enum.Font.Gotham; TBtn.TextSize=11; TBtn.AutoButtonColor=false
+        local TC=Instance.new("ScrollingFrame",CA); TC.Size=UDim2.new(1,-20,1,-20); TC.Position=UDim2.new(0,10,0,10)
+        TC.BackgroundTransparency=1; TC.ScrollBarThickness=2; TC.Visible=false
+        local CL=Instance.new("UIListLayout",TC); CL.SortOrder=Enum.SortOrder.LayoutOrder; CL.Padding=UDim.new(0,4)
+        CL:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() TC.CanvasSize=UDim2.new(0,0,0,CL.AbsoluteContentSize.Y+10) end)
+        TBtn.MouseButton1Click:Connect(function()
+            for _,t in pairs(Win.Tabs) do t.Btn.BackgroundColor3=Theme.TabBg; t.Content.Visible=false end
+            TBtn.BackgroundColor3=Theme.TabActive; TC.Visible=true
+        end)
+        if not Win.CurrentTab then Win.CurrentTab=name; TBtn.BackgroundColor3=Theme.TabActive; TC.Visible=true end
+        table.insert(Win.Tabs,{Btn=TBtn,Content=TC})
+        local TabObj={}
+        function TabObj:AddSection(sn)
+            local Sp=Instance.new("Frame",TC); Sp.Size=UDim2.new(1,0,0,20); Sp.BackgroundTransparency=1
+            local SL=Instance.new("TextLabel",Sp); SL.Size=UDim2.new(1,0,1,0); SL.BackgroundTransparency=1
+            SL.Text=sn; SL.TextColor3=Theme.TextSub; SL.Font=Enum.Font.GothamSemibold; SL.TextSize=11; SL.TextXAlignment=Enum.TextXAlignment.Left
+            local SO={}
+            function SO:AddToggle(lbl,def,cb)
+                local TB2=Instance.new("TextButton",TC); TB2.Size=UDim2.new(1,0,0,28); TB2.BackgroundTransparency=1; TB2.Text=""; TB2.AutoButtonColor=false
+                local Box=Instance.new("Frame",TB2); Box.Size=UDim2.new(0,14,0,14); Box.Position=UDim2.new(0,4,0.5,-7)
+                Box.BackgroundColor3=def and Theme.Accent or Theme.TopbarBg; Box.BorderSizePixel=0
+                Instance.new("UICorner",Box).CornerRadius=UDim.new(0,3)
+                local TL2=Instance.new("TextLabel",TB2); TL2.Size=UDim2.new(1,-28,1,0); TL2.Position=UDim2.new(0,26,0,0)
+                TL2.BackgroundTransparency=1; TL2.Text=lbl; TL2.TextColor3=Theme.TextTitle; TL2.Font=Enum.Font.Gotham; TL2.TextSize=13; TL2.TextXAlignment=Enum.TextXAlignment.Left
+                local st=def or false
+                TB2.MouseButton1Click:Connect(function() st=not st; Box.BackgroundColor3=st and Theme.Accent or Theme.TopbarBg; cb(st) end)
+                if st then pcall(cb,st) end
             end
-        end
-    end
-end)
-
-VisualsSection:AddToggle("Player Tracers", "Draws lines to Murderer/Sheriff", false, function(Value)
-    Config.Tracers = Value
-end)
-
-VisualsSection:AddToggle("Gun ESP", "Highlight dropped gun", false, function(Value)
-    Config.GunESP = Value
-    if not Value then
-        for _, drop in pairs(workspace:GetDescendants()) do
-            if drop.Name == "GunDrop" and drop:FindFirstChild("ESP_Luno_Gun") then
-                drop.ESP_Luno_Gun:Destroy()
+            function SO:AddSlider(lbl,mn,mx,dv,cb)
+                local SF=Instance.new("Frame",TC); SF.Size=UDim2.new(1,0,0,36); SF.BackgroundTransparency=1
+                local SLb=Instance.new("TextLabel",SF); SLb.Size=UDim2.new(1,-40,0,14); SLb.BackgroundTransparency=1
+                SLb.Text=lbl; SLb.TextColor3=Theme.TextTitle; SLb.Font=Enum.Font.Gotham; SLb.TextSize=12; SLb.TextXAlignment=Enum.TextXAlignment.Left
+                local VLb=Instance.new("TextLabel",SF); VLb.Size=UDim2.new(0,36,0,14); VLb.Position=UDim2.new(1,-36,0,0)
+                VLb.BackgroundTransparency=1; VLb.Text=tostring(dv); VLb.TextColor3=Theme.TextTitle; VLb.Font=Enum.Font.Gotham; VLb.TextSize=12; VLb.TextXAlignment=Enum.TextXAlignment.Right
+                local Tr=Instance.new("TextButton",SF); Tr.Size=UDim2.new(1,0,0,6); Tr.Position=UDim2.new(0,0,0,20)
+                Tr.BackgroundColor3=Theme.TopbarBg; Tr.BorderSizePixel=0; Tr.Text=""; Tr.AutoButtonColor=false
+                Instance.new("UICorner",Tr).CornerRadius=UDim.new(1,0)
+                local Fi=Instance.new("Frame",Tr); local ip=math.clamp((dv-mn)/(mx-mn),0,1)
+                Fi.Size=UDim2.new(ip,0,1,0); Fi.BackgroundColor3=Theme.Accent; Fi.BorderSizePixel=0
+                Instance.new("UICorner",Fi).CornerRadius=UDim.new(1,0)
+                local sl=false
+                Tr.MouseButton1Down:Connect(function() sl=true end)
+                UserInputService.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then sl=false end end)
+                UserInputService.InputChanged:Connect(function(i)
+                    if sl and i.UserInputType==Enum.UserInputType.MouseMovement then
+                        local p=math.clamp((i.Position.X-Tr.AbsolutePosition.X)/Tr.AbsoluteSize.X,0,1)
+                        Fi.Size=UDim2.new(p,0,1,0); local v=math.floor(mn+(mx-mn)*p); VLb.Text=tostring(v); cb(v)
+                    end
+                end)
+                pcall(cb,dv)
             end
-        end
-    end
-end)
-
-VisualsSection:AddToggle("Coin ESP", "Highlight all coins", false, function(Value)
-    Config.CoinESP = Value
-    if not Value then
-        for _, desc in pairs(workspace:GetDescendants()) do
-            if desc:FindFirstChild("ESP_Luno_Coin") then
-                pcall(function() desc.ESP_Luno_Coin:Destroy() end)
+            function SO:AddButton(lbl,cb)
+                local Btn=Instance.new("TextButton",TC); Btn.Size=UDim2.new(1,-8,0,28); Btn.Position=UDim2.new(0,4,0,0)
+                Btn.BackgroundColor3=Theme.TopbarBg; Btn.BorderSizePixel=0; Btn.Text=lbl; Btn.TextColor3=Theme.TextTitle
+                Btn.Font=Enum.Font.Gotham; Btn.TextSize=13; Btn.AutoButtonColor=false
+                Instance.new("UICorner",Btn).CornerRadius=UDim.new(0,4)
+                Btn.MouseButton1Click:Connect(cb)
+                Btn.MouseEnter:Connect(function() Btn.BackgroundColor3=Color3.fromRGB(40,40,55) end)
+                Btn.MouseLeave:Connect(function() Btn.BackgroundColor3=Theme.TopbarBg end)
             end
+            return SO
+        end
+        return TabObj
+    end
+    return Win
+end
+
+-- ====================================================================
+-- CREATE WINDOW & TABS
+-- ====================================================================
+local Window      = Library:CreateWindow("MM2 Combat")
+local CombatTab   = Window:AddTab("Combat")
+local VisualsTab  = Window:AddTab("Visuals")
+local PlayerTab   = Window:AddTab("Player")
+local SettingsTab = Window:AddTab("Settings")
+
+-- COMBAT TAB
+local C1 = CombatTab:AddSection("Combat Utilities")
+C1:AddToggle("Kill Aura", false, function(v) Config.KillAura = v end)
+C1:AddSlider("Aura Range", 5, 30, 15, function(v) Config.AuraRange = v end)
+C1:AddToggle("Kill All As Murderer", false, function(v) Config.KillAllAsMurderer = v end)
+C1:AddToggle("Murderer Radar HUD", false, function(v)
+    Config.MurdererRadar = v
+    local r = Window.ScreenGui:FindFirstChild("Luno_MM2_Radar")
+    if r then r.Visible = v end
+end)
+C1:AddButton("Teleport To Murderer", function()
+    local m = GetMurderer()
+    if m and m.Character and m.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        LocalPlayer.Character.HumanoidRootPart.CFrame = m.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 3)
+    end
+end)
+
+-- VISUALS TAB
+local V1 = VisualsTab:AddSection("Player Visuals")
+V1:AddToggle("Role ESP", true, function(v) Config.RoleESP = v end)
+V1:AddToggle("Box & Chams ESP", true, function(v) Config.BoxESP = v end)
+V1:AddToggle("Name & Distance Tag", true, function(v) Config.NameESP = v end)
+V1:AddToggle("Tracers", false, function(v) Config.Tracers = v end)
+
+local V2 = VisualsTab:AddSection("World ESP")
+V2:AddToggle("Gun ESP", false, function(v)
+    Config.GunESP = v
+    if not v then
+        for _, drop in ipairs(workspace:GetDescendants()) do
+            if drop:FindFirstChild("Luno_MM2_GunESP") then drop.Luno_MM2_GunESP:Destroy() end
+        end
+    end
+end)
+V2:AddToggle("Coin ESP", false, function(v)
+    Config.CoinESP = v
+    if not v then
+        for _, desc in ipairs(workspace:GetDescendants()) do
+            if desc:FindFirstChild("Luno_MM2_CoinESP") then desc.Luno_MM2_CoinESP:Destroy() end
         end
     end
 end)
 
--- ====================
--- Player Tab
--- ====================
-local PlayerTab = Window:AddTab("Player", "🏃")
-local PlrSubTab = PlayerTab:AddSubTab("Main", "")
-local PlayerSection = PlrSubTab:AddSection("Player Mods", "Left")
-
-PlayerSection:AddSlider("WalkSpeed", 16, 100, 16, function(Value)
-    Config.WalkSpeed = Value
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-        LocalPlayer.Character.Humanoid.WalkSpeed = Value
+-- PLAYER TAB
+local P1 = PlayerTab:AddSection("Character Movement")
+P1:AddToggle("Enable Speed Boost", false, function(v)
+    Config.EnableSpeed = v
+    if not v and LocalPlayer.Character then
+        local h = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if h then h.WalkSpeed = 16 end
     end
 end)
+P1:AddSlider("WalkSpeed", 16, 100, 32, function(v) Config.WalkSpeed = v end)
 
-PlayerSection:AddSlider("JumpPower", 50, 200, 50, function(Value)
-    Config.JumpPower = Value
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-        LocalPlayer.Character.Humanoid.JumpPower = Value
+P1:AddToggle("Enable Jump Boost", false, function(v)
+    Config.EnableJump = v
+    if not v and LocalPlayer.Character then
+        local h = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if h then h.JumpPower = 50 end
     end
 end)
+P1:AddSlider("JumpPower", 50, 200, 100, function(v) Config.JumpPower = v end)
 
-PlayerSection:AddToggle("NoClip", "Walk through walls", false, function(Value)
-    Config.NoClip = Value
-end)
-
-local OriginalTransparencies = {}
-PlayerSection:AddToggle("X-Ray Map", "See through walls", false, function(Value)
-    Config.XRay = Value
-    if Value then
-        for _, obj in pairs(workspace:GetDescendants()) do
-            if obj:IsA("BasePart") and not obj.Parent:FindFirstChild("Humanoid") and obj.Name ~= "HumanoidRootPart" then
+local P2 = PlayerTab:AddSection("Abilities")
+P2:AddToggle("Infinite Jump", false, function(v) Config.InfiniteJump = v end)
+P2:AddToggle("Noclip",        false, function(v) Config.NoClip = v end)
+P2:AddToggle("X-Ray Map",     false, function(v)
+    Config.XRay = v
+    if v then
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("BasePart") and not obj.Parent:FindFirstChildOfClass("Humanoid") and obj.Name ~= "HumanoidRootPart" then
                 if obj.Transparency < 0.5 then
                     OriginalTransparencies[obj] = obj.Transparency
                     obj.Transparency = 0.5
@@ -608,69 +477,175 @@ PlayerSection:AddToggle("X-Ray Map", "See through walls", false, function(Value)
         end
     else
         for obj, trans in pairs(OriginalTransparencies) do
-            if obj and obj.Parent then
-                obj.Transparency = trans
-            end
+            if obj and obj.Parent then obj.Transparency = trans end
         end
         OriginalTransparencies = {}
     end
 end)
 
--- ====================
--- Main Logic Loop
--- ====================
-RunService.RenderStepped:Connect(function()
-    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("Humanoid") then return end
+-- SETTINGS TAB (FULL UNLOAD SYSTEM)
+local function UnloadScript()
+    scriptRunning = false
+    Config.KillAura = false
+    Config.KillAllAsMurderer = false
+    Config.AutoCollectGun = false
+    Config.MurdererRadar = false
+    Config.RoleESP = false
+    Config.BoxESP = false
+    Config.NameESP = false
+    Config.Tracers = false
+    Config.GunESP = false
+    Config.CoinESP = false
+    Config.EnableSpeed = false
+    Config.EnableJump = false
+    Config.InfiniteJump = false
+    Config.NoClip = false
+    Config.XRay = false
 
-    -- NoClip
-    if Config.NoClip and LocalPlayer.Character then
-        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
-            if part:IsA("BasePart") and part.CanCollide then
-                part.CanCollide = false
-            end
-        end
-    end
-    
-    -- Player Mods
-    if Config.WalkSpeed > 16 and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character:FindFirstChild("Humanoid") then
-        local moveDir = LocalPlayer.Character.Humanoid.MoveDirection
-        if moveDir.Magnitude > 0 then
-            LocalPlayer.Character.HumanoidRootPart.CFrame = LocalPlayer.Character.HumanoidRootPart.CFrame + (moveDir * (Config.WalkSpeed - 16) * 0.015)
-        end
-    end
-    if LocalPlayer.Character.Humanoid.JumpPower ~= Config.JumpPower then
-        LocalPlayer.Character.Humanoid.JumpPower = Config.JumpPower
+    if renderConn then pcall(function() renderConn:Disconnect() end) end
+    if steppedConn then pcall(function() steppedConn:Disconnect() end) end
+    if jumpConn then pcall(function() jumpConn:Disconnect() end) end
+    if gunConn then pcall(function() gunConn:Disconnect() end) end
+
+    if LocalPlayer.Character then
+        local h = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if h then h.WalkSpeed = 16; h.JumpPower = 50 end
     end
 
-    -- Hitbox Expander (Applied cleanly without constant reallocation)
-    if Config.HitboxExpander then
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer and player.Character then
-                local root = player.Character:FindFirstChild("HumanoidRootPart") or player.Character:FindFirstChild("UpperTorso") or player.Character:FindFirstChild("Torso")
-                if root and root:IsA("BasePart") then
-                    root.Size = Vector3.new(Config.HitboxSize, Config.HitboxSize, Config.HitboxSize)
-                    root.Transparency = 0.6
-                    root.CanCollide = false
+    for obj, trans in pairs(OriginalTransparencies) do
+        if obj and obj.Parent then obj.Transparency = trans end
+    end
+
+    for _, pl in ipairs(Players:GetPlayers()) do RemovePlayerESP(pl) end
+    for k, v in pairs(Tracers) do pcall(function() v:Remove() end); Tracers[k] = nil end
+
+    if Window and Window.ScreenGui then Window.ScreenGui:Destroy() end
+    local g = game:GetService("CoreGui"):FindFirstChild("LunoMM2CombatFlat")
+    if g then g:Destroy() end
+
+    print("[Luno MM2 Combat] Unloaded Successfully.")
+end
+
+local S1 = SettingsTab:AddSection("Script Controls")
+S1:AddButton("Unload Script", UnloadScript)
+S1:AddButton("Rejoin Server", function()
+    pcall(function() TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer) end)
+end)
+S1:AddButton("Server Hop", function()
+    pcall(function()
+        local req = (syn and syn.request) or http_request or request
+        if req then
+            local res = req({Url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100", Method = "GET"})
+            local body = game:GetService("HttpService"):JSONDecode(res.Body)
+            if body and body.data then
+                for _, sv in ipairs(body.data) do
+                    if sv.playing < sv.maxPlayers and sv.id ~= game.JobId then
+                        TeleportService:TeleportToPlaceInstance(game.PlaceId, sv.id, LocalPlayer)
+                        return
+                    end
                 end
             end
+        end
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    end)
+end)
+
+-- ====================================================================
+-- LISTENERS & EVENT HOOKS
+-- ====================================================================
+jumpConn = UserInputService.JumpRequest:Connect(function()
+    if not scriptRunning or not LocalPlayer.Character then return end
+    local h = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+    if Config.InfiniteJump and h and h.Health > 0 then
+        h:ChangeState(Enum.HumanoidStateType.Jumping)
+    end
+end)
+
+steppedConn = RunService.Stepped:Connect(function()
+    if not scriptRunning or not LocalPlayer.Character then return end
+    if Config.NoClip then
+        for _, p in ipairs(LocalPlayer.Character:GetDescendants()) do
+            if p:IsA("BasePart") then p.CanCollide = false end
+        end
+    end
+end)
+
+-- ====================================================================
+-- RENDERSTEPPED LOOP
+-- ====================================================================
+renderConn = RunService.RenderStepped:Connect(function()
+    if not scriptRunning then return end
+    Camera = workspace.CurrentCamera
+
+    -- Player Movement Mods
+    if LocalPlayer.Character then
+        local h = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if h then
+            if Config.EnableSpeed then h.WalkSpeed = Config.WalkSpeed end
+            if Config.EnableJump  then h.UseJumpPower = true; h.JumpPower = Config.JumpPower end
+        end
+    end
+
+    -- Player ESP Update
+    for _, pl in ipairs(Players:GetPlayers()) do
+        if pl ~= LocalPlayer then UpdatePlayerESP(pl) end
+    end
+
+    -- Murderer Radar HUD Update
+    if Config.MurdererRadar then
+        local radarGui = Window.ScreenGui:FindFirstChild("Luno_MM2_Radar")
+        if not radarGui then
+            radarGui = Instance.new("Frame")
+            radarGui.Name = "Luno_MM2_Radar"
+            radarGui.Size = UDim2.new(0, 260, 0, 36)
+            radarGui.Position = UDim2.new(0.5, -130, 0, 15)
+            radarGui.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+            radarGui.BorderSizePixel = 0
+            radarGui.Parent = Window.ScreenGui
+
+            Instance.new("UICorner", radarGui).CornerRadius = UDim.new(0, 8)
+            local rStroke = Instance.new("UIStroke", radarGui)
+            rStroke.Color = Theme.Accent; rStroke.Thickness = 1.5
+
+            local rText = Instance.new("TextLabel", radarGui)
+            rText.Name = "RadarText"
+            rText.Size = UDim2.new(1, 0, 1, 0)
+            rText.BackgroundTransparency = 1
+            rText.TextColor3 = Color3.fromRGB(255, 255, 255)
+            rText.Font = Enum.Font.GothamBold
+            rText.TextSize = 12
+            rText.Text = "🔍 Searching for Murderer..."
+        end
+
+        radarGui.Visible = true
+        local rText2 = radarGui:FindFirstChild("RadarText")
+        local murderer = GetMurderer()
+        if murderer and murderer.Character and murderer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local dist = math.floor((murderer.Character.HumanoidRootPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude)
+            if dist < 25 then
+                rText2.Text = string.format("🚨 DANGER! %s is %dm away!", murderer.Name, dist)
+                rText2.TextColor3 = Color3.fromRGB(255, 60, 60)
+            elseif dist < 50 then
+                rText2.Text = string.format("⚠️ CAUTION: %s is %dm away", murderer.Name, dist)
+                rText2.TextColor3 = Color3.fromRGB(255, 200, 50)
+            else
+                rText2.Text = string.format("🟢 SAFE: %s is %dm away", murderer.Name, dist)
+                rText2.TextColor3 = Color3.fromRGB(100, 255, 150)
+            end
+        else
+            rText2.Text = "🟢 Murderer: Hidden / Alive"
+            rText2.TextColor3 = Color3.fromRGB(180, 190, 210)
         end
     else
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer and player.Character then
-                local root = player.Character:FindFirstChild("HumanoidRootPart")
-                if root and root.Size.X > 2 then
-                    root.Size = Vector3.new(2, 2, 1)
-                    root.Transparency = 1
-                end
-            end
-        end
+        local oldR = Window.ScreenGui:FindFirstChild("Luno_MM2_Radar")
+        if oldR then oldR.Visible = false end
     end
 
-    -- Kill Aura
-    if Config.KillAura then
+    -- Kill Aura Loop
+    if Config.KillAura and LocalPlayer.Character then
         local knife = LocalPlayer.Character:FindFirstChild("Knife")
         if knife then
-            local target = getClosestPlayer(Config.AuraRange)
+            local target = GetClosestTarget(Config.AuraRange)
             if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
                 local slashRemote = knife:FindFirstChild("Slash")
                 if slashRemote then
@@ -680,106 +655,25 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- Optimized Role ESP (Reuses single Highlight per character without re-querying descendants)
-    if Config.ESP then
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer and player.Character then
-                local role = getRole(player)
-                local color = Color3.fromRGB(0, 255, 100)
-                if role == "Murderer" then
-                    color = Color3.fromRGB(255, 40, 40)
-                elseif role == "Sheriff" then
-                    color = Color3.fromRGB(0, 150, 255)
-                end
-
-                local esp = player.Character:FindFirstChild("ESP_Luno")
-                if not esp then
-                    esp = Instance.new("Highlight")
-                    esp.Name = "ESP_Luno"
-                    esp.FillTransparency = 0.5
-                    esp.OutlineTransparency = 0
-                    esp.Parent = player.Character
-                end
-                esp.FillColor = color
-                esp.OutlineColor = Color3.fromRGB(255, 255, 255)
-                esp.Enabled = true
-            end
-        end
-    end
-end)
-
--- Optimized Gun & Coin ESP Scanners (Runs on background thread instead of every frame to eliminate lag)
-task.spawn(function()
-    while true do
-        task.wait(0.5)
-        if Config.GunESP then
-            for _, drop in ipairs(workspace:GetDescendants()) do
-                if drop.Name == "GunDrop" then
-                    if not drop:FindFirstChild("ESP_Luno_Gun") then
-                        local esp = Instance.new("Highlight")
-                        esp.Name = "ESP_Luno_Gun"
-                        esp.FillColor = Color3.fromRGB(255, 215, 0)
-                        esp.OutlineColor = Color3.fromRGB(255, 255, 255)
-                        esp.FillTransparency = 0.2
-                        esp.Parent = drop
-                    end
-                end
-            end
-        end
-
-        if Config.CoinESP then
-            for _, desc in ipairs(workspace:GetDescendants()) do
-                if isValidCoin(desc) then
-                    if not desc:FindFirstChild("ESP_Luno_Coin") then
-                        local esp = Instance.new("Highlight")
-                        esp.Name = "ESP_Luno_Coin"
-                        esp.FillColor = Color3.fromRGB(255, 215, 0)
-                        esp.OutlineColor = Color3.fromRGB(255, 255, 255)
-                        esp.FillTransparency = 0.3
-                        esp.Parent = desc
-                    end
-                end
-            end
-        end
-    end
-end)
-
--- Tracers Logic (Drawing API)
-local camera = workspace.CurrentCamera
-local Tracers = {}
-
-RunService.RenderStepped:Connect(function()
+    -- Tracers Loop
     if Config.Tracers then
-        for _, player in pairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer then
-                local role = getRole(player)
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                local role = GetPlayerRole(player)
                 if role == "Murderer" or role == "Sheriff" then
-                    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                        local rootPart = player.Character.HumanoidRootPart
-                        local pos, onScreen = camera:WorldToViewportPoint(rootPart.Position)
-                        
-                        if onScreen then
-                            if not Tracers[player.Name] then
-                                Tracers[player.Name] = Drawing.new("Line")
-                                Tracers[player.Name].Thickness = 2
-                                Tracers[player.Name].Transparency = 1
-                            end
-                            
-                            local tracer = Tracers[player.Name]
-                            tracer.From = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y)
-                            tracer.To = Vector2.new(pos.X, pos.Y)
-                            tracer.Visible = true
-                            
-                            if role == "Murderer" then
-                                tracer.Color = Color3.fromRGB(255, 0, 0)
-                            else
-                                tracer.Color = Color3.fromRGB(0, 0, 255)
-                            end
-                        else
-                            if Tracers[player.Name] then
-                                Tracers[player.Name].Visible = false
-                            end
+                    local root = player.Character.HumanoidRootPart
+                    local pos, onScreen = Camera:WorldToViewportPoint(root.Position)
+                    if onScreen then
+                        if not Tracers[player.Name] then
+                            Tracers[player.Name] = Drawing.new("Line")
+                            Tracers[player.Name].Thickness = 2
+                            Tracers[player.Name].Transparency = 1
                         end
+                        local line = Tracers[player.Name]
+                        line.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+                        line.To = Vector2.new(pos.X, pos.Y)
+                        line.Color = GetRoleColor(role)
+                        line.Visible = true
                     elseif Tracers[player.Name] then
                         Tracers[player.Name].Visible = false
                     end
@@ -797,55 +691,55 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
-Players.PlayerRemoving:Connect(function(player)
-    if Tracers[player.Name] then
-        Tracers[player.Name]:Remove()
-        Tracers[player.Name] = nil
-    end
-end)
-
--- Auto Collect Gun Listener
-workspace.DescendantAdded:Connect(function(descendant)
-    if Config.AutoCollectGun and descendant.Name == "GunDrop" then
-        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            -- Wait a split second for the gun to fully physics-simulate before TPing to it
-            task.wait(0.1)
-            if descendant.Parent then
-                LocalPlayer.Character.HumanoidRootPart.CFrame = descendant.CFrame
-            end
-        end
-    end
-end)
-
--- Background Tasks (Kill All & Fling)
+-- Background Scanner for Gun & Coin ESP
 task.spawn(function()
-    while task.wait(0.2) do
-        -- Kill All
-        if Config.KillAllAsMurderer and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            local knife = LocalPlayer.Character:FindFirstChild("Knife")
-            if knife then
-                for _, player in pairs(Players:GetPlayers()) do
-                    if Config.KillAllAsMurderer and player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
-                        LocalPlayer.Character.HumanoidRootPart.CFrame = player.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 3)
-                        local slashRemote = knife:FindFirstChild("Slash")
-                        if slashRemote then
-                            slashRemote:FireServer(player.Character.HumanoidRootPart.Position)
-                        end
-                        task.wait(0.25)
+    while scriptRunning do
+        task.wait(0.5)
+        if Config.GunESP then
+            for _, drop in ipairs(workspace:GetDescendants()) do
+                if drop.Name == "GunDrop" and drop:IsA("BasePart") then
+                    if not drop:FindFirstChild("Luno_MM2_GunESP") then
+                        local esp = Instance.new("Highlight")
+                        esp.Name = "Luno_MM2_GunESP"
+                        esp.FillColor = Color3.fromRGB(255, 215, 0)
+                        esp.OutlineColor = Color3.fromRGB(255, 255, 255)
+                        esp.FillTransparency = 0.2
+                        esp.Parent = drop
                     end
                 end
             end
         end
-        
-        -- Fling Murderer
-        if Config.FlingMurderer and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-            local murderer = getMurderer()
-            if murderer and murderer.Character and murderer.Character:FindFirstChild("HumanoidRootPart") then
-                -- Teleport inside them and spin wildly
-                LocalPlayer.Character.HumanoidRootPart.CFrame = murderer.Character.HumanoidRootPart.CFrame
-                LocalPlayer.Character.HumanoidRootPart.Velocity = Vector3.new(10000, 10000, 10000)
-                LocalPlayer.Character.HumanoidRootPart.RotVelocity = Vector3.new(10000, 10000, 10000)
+
+        if Config.CoinESP then
+            for _, desc in ipairs(workspace:GetDescendants()) do
+                if IsValidCoinPart(desc) then
+                    if not desc:FindFirstChild("Luno_MM2_CoinESP") then
+                        local esp = Instance.new("Highlight")
+                        esp.Name = "Luno_MM2_CoinESP"
+                        esp.FillColor = Color3.fromRGB(255, 215, 0)
+                        esp.OutlineColor = Color3.fromRGB(255, 255, 255)
+                        esp.FillTransparency = 0.3
+                        esp.Parent = desc
+                    end
+                end
+            end
+        end
+
+        -- Kill All Loop
+        if Config.KillAllAsMurderer and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local knife = LocalPlayer.Character:FindFirstChild("Knife")
+            if knife then
+                for _, player in ipairs(Players:GetPlayers()) do
+                    if Config.KillAllAsMurderer and player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChildOfClass("Humanoid") and player.Character:FindFirstChildOfClass("Humanoid").Health > 0 then
+                        LocalPlayer.Character.HumanoidRootPart.CFrame = player.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 3)
+                        local slashRemote = knife:FindFirstChild("Slash")
+                        if slashRemote then slashRemote:FireServer(player.Character.HumanoidRootPart.Position) end
+                        task.wait(0.2)
+                    end
+                end
             end
         end
     end
 end)
+
+print("[Luno MM2 Combat].")
